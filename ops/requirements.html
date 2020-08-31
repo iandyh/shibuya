@@ -162,12 +162,17 @@
                         <h1><a class="header" href="#setup-the-dependencies" id="setup-the-dependencies">Setup the dependencies</a></h1>
 <p>Shibuya relies on below components:</p>
 <ul>
+<li>shibuya-controller: The actual process that handles all the Shibuya business logic</li>
 <li>Kubernetes: Shibuya deploys all the load generators into a kubernetes cluster</li>
 <li>MySQL: all the session data and business logic</li>
 <li>Grafana: Metrics collected by Prometheus will be rendered at Grafana</li>
 <li>Prometheus: Metrics collected from the load generators will be scraped by Prom.</li>
 </ul>
 <p>We will discuss each of this dependencies separately.</p>
+<h2><a class="header" href="#architecture-overview" id="architecture-overview">Architecture Overview</a></h2>
+<p><img src="../images/shibuya-architecture.png" alt="image" /></p>
+<h2><a class="header" href="#shibuya-controller" id="shibuya-controller">Shibuya-controller</a></h2>
+<p>We don't limit how you deploy the shibuya controller. The process it self is listening on 8080 port. Each shibuya controller is configured by a configuration file called <code>config.json</code>. We will discuss in details in the next section. <a href="./config.html">link</a></p>
 <h2><a class="header" href="#kubernetes" id="kubernetes">Kubernetes</a></h2>
 <p>Current supported versions should work well with Shibuya.</p>
 <p>Please follow below steps to setup the k8s cluster:</p>
