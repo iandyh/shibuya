@@ -95,7 +95,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="shibuya_ops.html"><strong aria-hidden="true">1.</strong> How to run Shibuya</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="requirements.html"><strong aria-hidden="true">1.1.</strong> Basic Requirements</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><a href="ops/ops_intro.html"><strong aria-hidden="true">1.</strong> How to run Shibuya</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="ops/requirements.html"><strong aria-hidden="true">1.1.</strong> Basic Requirements</a></li></ol></li><li class="chapter-item expanded "><a href="user/user_guide_intro.html"><strong aria-hidden="true">2.</strong> How to use Shibuya</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="user/concept.html"><strong aria-hidden="true">2.1.</strong> Basic Concepts</a></li></ol></li><li class="chapter-item expanded "><a href="dev/intro.html"><strong aria-hidden="true">3.</strong> Shibuya developers</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -162,9 +162,38 @@
                 <div id="content" class="content">
                     <main>
                         <h1><a class="header" href="#introduction" id="introduction">Introduction</a></h1>
-<p>Shibuya</p>
-<h1><a class="header" href="#chapter-1" id="chapter-1">Chapter 1</a></h1>
-<h1><a class="header" href="#basic-requirements" id="basic-requirements">Basic Requirements</a></h1>
+<p>Shibuya is a load test scheduling tool.</p>
+<p>This book will provide two types of guides(Please check the links in the left index):</p>
+<ol>
+<li>People who want to run Shibuya as a service. <a href="ops/ops_intro.html">click here</a></li>
+<li>People who is using Shibuya. <a href="user/user_guide_intro.html">click here</a></li>
+</ol>
+<h1><a class="header" href="#how-to-run-shibuya" id="how-to-run-shibuya">How to Run Shibuya</a></h1>
+<p>In this chapter, we will discuss how you can setup Shibuya as a service, internally or on public cloud, so that you can provide Shibuya as a service to your users.</p>
+<p>Let's start with basic requirements.</p>
+<h1><a class="header" href="#setup-the-dependencies" id="setup-the-dependencies">Setup the dependencies</a></h1>
+<p>Shibuya relies on below components:</p>
+<ul>
+<li>Kubernetes: Shibuya deploys all the load generators into a kubernetes cluster</li>
+<li>MySQL: all the session data and business logic</li>
+<li>Grafana: Metrics collected by Prometheus will be rendered at Grafana</li>
+<li>Prometheus: Metrics collected from the load generators will be scraped by Prom.</li>
+</ul>
+<p>We will discuss each of this dependencies separately.</p>
+<h2><a class="header" href="#kubernetes" id="kubernetes">Kubernetes</a></h2>
+<p>Current supported versions should work well with Shibuya.</p>
+<p>Please follow below steps to setup the k8s cluster:</p>
+<ol>
+<li><code>kubect create ns shibuya-executors</code></li>
+</ol>
+<h2><a class="header" href="#mysql" id="mysql">MySQL</a></h2>
+<p>Internally, we are using fork of MySQL, MariaDB. But current versions of MySQL should work well with Shibuya.</p>
+<p>All the schema files are stored under db folder. You just need to load the schemas into the database.</p>
+<h2><a class="header" href="#grafana" id="grafana">Grafana</a></h2>
+<h2><a class="header" href="#prometheus" id="prometheus">Prometheus</a></h2>
+<h1><a class="header" href="#how-to-use-shibuya" id="how-to-use-shibuya">How to use Shibuya</a></h1>
+<h1><a class="header" href="#basic-concepts" id="basic-concepts">Basic Concepts</a></h1>
+<h1><a class="header" href="#shibuya-developers" id="shibuya-developers">Shibuya developers</a></h1>
 
                     </main>
 
