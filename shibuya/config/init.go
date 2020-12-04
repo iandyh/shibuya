@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/go-redis/redis/v8"
 	log "github.com/sirupsen/logrus"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -80,6 +81,10 @@ type ObjectStorage struct {
 	Bucket   string `json:"bucket"`
 }
 
+type RedisConfig struct {
+	Addr string `json:addr`
+}
+
 type LogFormat struct {
 	Json     bool   `json:"json"`
 	JsonPath string `json:"path"`
@@ -105,12 +110,14 @@ type ShibuyaConfig struct {
 	LogFormat        *LogFormat       `json:"log_format"`
 	BackgroundColour string           `json:"bg_color"`
 	IngressConfig    *IngressConfig   `json:"ingress"`
+	RedisConfig      *RedisConfig     `json:"redis"`
 
 	// below are configs generated from above values
 	DevMode    bool
 	Context    string
 	HTTPClient *http.Client
 	DBC        *sql.DB
+	RDS        *redis.Client
 	DBEndpoint string
 }
 
@@ -175,4 +182,5 @@ func init() {
 	setupLogging()
 	sc.DBC = createMySQLClient(sc.DBConf)
 	sc.DBEndpoint = sc.DBConf.Endpoint
+	sc.RDS = createRedisClient(sc.RedisConfig.Addr)
 }

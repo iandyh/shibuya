@@ -1,4 +1,4 @@
-all: | cluster permissions db prometheus grafana shibuya jmeter local_storage
+all: | cluster permissions db prometheus grafana redis shibuya jmeter local_storage
 
 shibuya-controller-ns = shibuya-executors
 shibuya-executor-ns = shibuya-executors
@@ -33,6 +33,12 @@ grafana: grafana/
 	kind load docker-image shibuya:grafana --name shibuya
 	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/grafana.yaml --force
 
+.PHONY: worker
+worker: worker/
+	docker build -t shibuya:worker worker
+	kind load docker-image shibuya:worker --name shibuya
+	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/worker.yaml --force
+
 .PHONY: shibuya
 shibuya: shibuya/ kubernetes/
 	cp shibuya/config_tmpl.json shibuya/config_local.json
@@ -44,6 +50,10 @@ shibuya: shibuya/ kubernetes/
 jmeter: jmeter/
 	docker build -t shibuya:jmeter jmeter
 	kind load docker-image shibuya:jmeter --name shibuya
+
+.PHONY: redis
+redis:
+	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/redis.yaml --force
 
 .PHONY: expose
 expose:
