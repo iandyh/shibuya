@@ -244,8 +244,8 @@ func (c *Controller) TermCollection(collection *model.Collection, force bool) (e
 		wg.Add(1)
 		go func(ep *model.ExecutionPlan) {
 			defer wg.Done()
-			pc := NewPlanController(ep, collection, nil) // we don't need kcm here
-			if err := pc.term(force, &c.connectedEngines); err != nil {
+			pc := NewPlanController(ep, collection, c.Kcm) // we don't need kcm here
+			if err := pc.term(force); err != nil {
 				log.Error(err)
 				e = err
 			}

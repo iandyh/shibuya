@@ -25,7 +25,7 @@ fi
 
 # get token from secret
 TOKEN=$(kubectl -n $1 get secrets $(kubectl -n $1 get sa shibuya -o=custom-columns=:."secrets[0].name") -o=custom-columns=:.data.token)
-TOKEN=$(echo $TOKEN | base64 -d)
+TOKEN=$(echo $TOKEN | base64 -D)
 kubeconfig=$(echo "$kubeconfig" | sed 's,TOKEN_HERE,'"$TOKEN"',g')
 
 # get ca.crt from secret

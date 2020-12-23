@@ -1,11 +1,26 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  labels:
+    app: worker
+spec:
+  ports:
+  - port: 80
+    name: web
+  clusterIP: None
+  selector:
+    app: worker
+---
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   labels:
     app: worker
   name: worker
 spec:
   replicas: 1
+  serviceName: worker
   selector:
     matchLabels:
       app: worker
@@ -17,4 +32,9 @@ spec:
       containers:
       - image: shibuya:worker
         name: worker
+        env:
+        - name: ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
 #

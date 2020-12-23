@@ -34,8 +34,8 @@ grafana: grafana/
 	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/grafana.yaml --force
 
 .PHONY: worker
-worker: worker/
-	docker build -t shibuya:worker worker
+worker: shibuya/
+	docker build -t shibuya:worker -f shibuya/Dockerfile.worker shibuya
 	kind load docker-image shibuya:worker --name shibuya
 	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/worker.yaml --force
 

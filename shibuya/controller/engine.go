@@ -35,6 +35,7 @@ type shibuyaEngine interface {
 	terminate(force bool) error
 	EngineID() int
 	updateEngineUrl(url string)
+	url() string
 }
 
 type engineType struct{}
@@ -120,6 +121,10 @@ func (be *baseEngine) subscribe(runID int64) error {
 	be.cancel = cancel
 	be.runID = runID
 	return nil
+}
+
+func (be *baseEngine) url() string {
+	return be.engineUrl
 }
 
 func (be *baseEngine) progress() bool {
