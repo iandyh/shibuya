@@ -752,6 +752,17 @@ func (s *ShibuyaAPI) fileDownloadHandler(w http.ResponseWriter, req *http.Reques
 	http.ServeContent(w, req, filename, time.Now(), r)
 }
 
+func (s *ShibuyaAPI) usageSummaryHandler(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	qs := req.URL.Query()
+	st := qs.Get("started_time")
+	et := qs.Get("end_time")
+	summary, err := model.GetUsageSummary(st, et)
+	if err != nil {
+		log.Print(err)
+	}
+	s.jsonise(w, http.StatusOK, summary)
+}
+
 type Route struct {
 	Name        string
 	Method      string
@@ -802,5 +813,6 @@ func (s *ShibuyaAPI) InitRoutes() Routes {
 		&Route{"files", "GET", "/api/files/:kind/:id/:name", s.fileDownloadHandler},
 
 		&Route{"admin_collections", "GET", "/api/admin/collections", s.collectionAdminGetHandler},
+		&Route{"usage_summary", "GET", "/api/admin/usage_summary", s.usageSummaryHandler},
 	}
 }
