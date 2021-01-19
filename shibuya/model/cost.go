@@ -9,6 +9,7 @@ import (
 
 type UsageSummary struct {
 	TotalEngineHours   map[string]float64            `json:"total_engine_hours"`
+	TotalNodesHours    map[string]float64            `json:"total_nodes_hours"`
 	EngineHoursByOwner map[string]map[string]float64 `json:"engine_hours_by_owner"`
 }
 
@@ -16,13 +17,14 @@ type LaunchHistory struct {
 	Context     string
 	Owner       string
 	Engines     int
+	Nodes       int
 	StartedTime time.Time
 	EndTime     time.Time
 }
 
 func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	db := config.SC.DBC
-	q, err := db.Prepare("select context, owner, engines_count, started_time, end_time from collection_launch_history where started_time > ? and end_time < ?")
+	q, err := db.Prepare("select context, owner, engines_count, nodes_count, started_time, end_time from collection_launch_history where started_time > ? and end_time < ?")
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +34,7 @@ func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	history := []*LaunchHistory{}
 	for rs.Next() {
 		lh := new(LaunchHistory)
-		rs.Scan(&lh.Context, &lh.Owner, &lh.Engines, &lh.StartedTime, &lh.EndTime)
+		rs.Scan(&lh.Context, &lh.Owner, &lh.Engines, &lh.Nodes, &lh.StartedTime, &lh.EndTime)
 		history = append(history, lh)
 	}
 	return history, nil
@@ -46,12 +48,16 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	s := new(UsageSummary)
 	s.TotalEngineHours = make(map[string]float64)
 	s.EngineHoursByOwner = make(map[string]map[string]float64)
+	s.TotalNodesHours = make(map[string]float64)
 	for _, h := range history {
 		teh := s.TotalEngineHours
+		tnh := s.TotalNodesHours
 		ehe := s.EngineHoursByOwner
 		duration := h.EndTime.Sub(h.StartedTime)
 		engineHours := duration.Hours() * float64(h.Engines)
+		nodeHours := duration.Hours() * float64(h.Nodes)
 		teh[h.Context] += engineHours
+		tnh[h.Context] += nodeHours
 		if m, ok := ehe[h.Owner]; !ok {
 			ehe[h.Owner] = make(map[string]float64)
 			ehe[h.Owner][h.Context] += engineHours
@@ -63,7 +69,8 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	for _, usage := range s.TotalEngineHours {
 		all += usage
 	}
-	s.TotalEngineHours["all"] = all
+	s.TotalEngineHours["engine_hours"] = all
+
 	return s, nil
 }
 
