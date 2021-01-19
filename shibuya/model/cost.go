@@ -58,5 +58,10 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 			m[h.Context] += engineHours
 		}
 	}
+	var all float64
+	for _, usage := range s.TotalEngineHours {
+		all += usage
+	}
+	s.TotalEngineHours["all"] = all
 	return s, nil
 }
