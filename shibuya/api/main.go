@@ -813,6 +813,17 @@ func (s *ShibuyaAPI) usageSummaryHandler(w http.ResponseWriter, req *http.Reques
 	s.jsonise(w, http.StatusOK, summary)
 }
 
+func (s *ShibuyaAPI) usageHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	qs := r.URL.Query()
+	sid := qs["start_run_id"][0]
+	eid := qs["end_run_id"][0]
+	startRunID, _ := strconv.ParseInt(sid, 10, 64)
+	endRunID, _ := strconv.ParseInt(eid, 10, 64)
+	m := model.CalEngineHours(startRunID, endRunID)
+	s.jsonise(w, http.StatusOK, m)
+	//w.Write([]byte(fmt.Sprintf("%f", total)))
+}
+
 type Route struct {
 	Name        string
 	Method      string
@@ -866,5 +877,6 @@ func (s *ShibuyaAPI) InitRoutes() Routes {
 
 		&Route{"admin_collections", "GET", "/api/admin/collections", s.collectionAdminGetHandler},
 		&Route{"usage_summary", "GET", "/api/admin/usage_summary", s.usageSummaryHandler},
+		&Route{"shibuya_usage", "GET", "/api/admin/usage", s.usageHandler},
 	}
 }

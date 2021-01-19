@@ -1,6 +1,7 @@
 package model
 
 import (
+	"log"
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -64,4 +65,124 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	}
 	s.TotalEngineHours["all"] = all
 	return s, nil
+}
+
+func GetPastMonthHistory(start_run_id, end_run_id int64) ([]*RunHistory, error) {
+	db := config.SC.DBC
+	q, err := db.Prepare("select collection_id, started_time, end_time from collection_run_history where run_id >=? and run_id <=?")
+	if err != nil {
+		return nil, err
+	}
+	defer q.Close()
+
+	r := []*RunHistory{}
+	rs, err := q.Query(start_run_id, end_run_id)
+	if err != nil {
+		return nil, err
+	}
+	defer rs.Close()
+	for rs.Next() {
+		run := new(RunHistory)
+		rs.Scan(&run.CollectionID, &run.StartedTime, &run.EndTime)
+		r = append(r, run)
+	}
+	return r, nil
+}
+
+type result struct {
+	engineHours  float64
+	engines      int
+	threads      int
+	hasEndTime   bool
+	collectionID int64
+	owner        string
+}
+
+type ResultPage struct {
+	TotalRuns        int                `json:"total_runs"`
+	TotalEngineHours float64            `json:"total_engine_hours"`
+	NoEndtime        int                `json:"no_end_time"`
+	TotalThreads     int                `json:"total_threads"`
+	TotalEngines     int                `json:"total_engines"`
+	CollectionUsage  map[int64]int      `json:"collection_engine_usage"`
+	OwnerUsage       map[string]float64 `json:"owner_engine_hour_usage"`
+}
+
+func CalEngineHours(start_run_id, end_run_id int64) *ResultPage {
+	history, err := GetPastMonthHistory(start_run_id, end_run_id)
+	if err != nil {
+		log.Print(err)
+	}
+
+	work := make(chan *RunHistory, len(history))
+	resultChan := make(chan *result, len(history))
+	for w := 0; w < 5; w++ {
+		go func() {
+			for h := range work {
+				hasEndtime := !h.EndTime.IsZero()
+				var duration time.Duration
+				if hasEndtime {
+					duration = h.EndTime.Sub(h.StartedTime)
+				} else {
+					duration, _ = time.ParseDuration("0s")
+				}
+				collection, err := GetCollection(h.CollectionID)
+				if err != nil {
+					log.Print(err)
+				}
+				eps, _ := collection.GetExecutionPlans()
+				total_engines := 0
+				total_threads := 0
+				for _, e := range eps {
+					total_engines += e.Engines
+					total_threads += e.Concurrency * e.Engines
+				}
+				p, err := GetProject(collection.ProjectID)
+				if err != nil {
+					log.Print(err)
+				}
+				resultChan <- &result{
+					engineHours:  duration.Hours() * float64(total_engines),
+					engines:      total_engines,
+					hasEndTime:   hasEndtime,
+					threads:      total_threads,
+					collectionID: h.CollectionID,
+					owner:        p.Owner,
+				}
+			}
+		}()
+	}
+	for _, h := range history {
+		work <- h
+	}
+	var totalEngineHours float64
+	totalEngines := 0
+	noEndtime := 0
+	totalThreads := 0
+	collectionEngines := make(map[int64]int)
+	ownerEngines := make(map[string]float64)
+	for range history {
+		item := <-resultChan
+		totalEngineHours += item.engineHours
+		totalEngines += item.engines
+		totalThreads += item.threads
+		collectionEngines[item.collectionID] = item.engines
+		ownerEngines[item.owner] += item.engineHours
+		if !item.hasEndTime {
+			noEndtime += 1
+		}
+	}
+	//sortedEngines := make([]int, len(collectionEngines))
+	close(work)
+	close(resultChan)
+	rp := &ResultPage{
+		TotalRuns:        len(history),
+		TotalEngineHours: totalEngineHours,
+		NoEndtime:        noEndtime,
+		TotalEngines:     totalEngines,
+		TotalThreads:     totalThreads,
+		CollectionUsage:  collectionEngines,
+		OwnerUsage:       ownerEngines,
+	}
+	return rp
 }
