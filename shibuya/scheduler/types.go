@@ -16,12 +16,13 @@ type EngineScheduler interface {
 	CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error)
 	FetchEngineUrlsByPlan(collectionID, planID int64, opts *smodel.EngineOwnerRef) ([]string, error)
 	ExposeCollection(ProjectID, collectionID int64) error
-	PurgeCollection(collectionID int64) error
+	PurgeCollection(projectID, collectionID int64) error
 	GetDeployedCollections() (map[int64]time.Time, error)
 	GetAllNodesInfo() (smodel.AllNodesInfo, error)
 	GetPodsMetrics(collectionID, planID int64) (map[string]apiv1.ResourceList, error)
-	PodReadyCount(collectionID int64) int
-	DownloadPodLog(collectionID, planID int64) (string, error)
+	PodReadyCount(projectID, collectionID int64) int
+	DownloadPodLog(projectID, collectionID, planID int64) (string, error)
+	GetClusterIDByProject(projectID int64) string
 }
 
 var FeatureUnavailable = errors.New("Feature unavailable")
@@ -30,8 +31,8 @@ func NewEngineScheduler(cfg *config.ClusterConfig) EngineScheduler {
 	switch cfg.Kind {
 	case "k8s":
 		return NewK8sClientManager(cfg)
-	case "cloudrun":
-		return NewCloudRun(cfg)
+		// case "cloudrun":
+		// 	return NewCloudRun(cfg)
 	}
 	log.Fatalf("Shibuya does not support %s as scheduler", cfg.Kind)
 	return nil

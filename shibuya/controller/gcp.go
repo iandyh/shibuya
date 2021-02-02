@@ -13,23 +13,27 @@ import (
 
 type GCPOperator struct {
 	collectionID    int64
+	projectID       int64
 	nodesRequired   int64
 	collectionIDStr string
+	clusterID       string
 	service         *google.Service
 	*config.ClusterConfig
 }
 
-func NewGCPOperator(collectionID, nodesRequired int64) *GCPOperator {
+func NewGCPOperator(projectID, collectionID, nodesRequired int64, clusterID string) *GCPOperator {
 	ctx := context.Background()
 	service, err := google.NewService(ctx)
 	if err != nil {
 		log.Error(err)
 	}
 	return &GCPOperator{
+		projectID:       projectID,
 		collectionID:    collectionID,
 		nodesRequired:   nodesRequired,
 		collectionIDStr: fmt.Sprintf("%d", collectionID),
 		service:         service,
+		clusterID:       clusterID,
 		ClusterConfig:   config.SC.ExecutorConfig.Cluster,
 	}
 }
@@ -46,7 +50,7 @@ func (o *GCPOperator) makeCreateNodePoolRequest(nodePool *google.NodePool) *goog
 
 func (o *GCPOperator) GetNodePool() *google.NodePool {
 	nodePoolService := o.service.Projects.Zones.Clusters.NodePools
-	currentNodePool, err := nodePoolService.Get(o.Project, o.Zone, o.ClusterID, o.makePoolName()).Do()
+	currentNodePool, err := nodePoolService.Get(o.Project, o.Zone, o.clusterID, o.makePoolName()).Do()
 	if err != nil {
 		return nil
 	}
@@ -55,7 +59,7 @@ func (o *GCPOperator) GetNodePool() *google.NodePool {
 
 func (o *GCPOperator) GetNodesSize() (int, error) {
 	kcm := scheduler.NewK8sClientManager(config.SC.ExecutorConfig.Cluster)
-	nodes, err := kcm.GetNodesByCollection(o.collectionIDStr)
+	nodes, err := kcm.GetNodesByCollection(o.projectID, o.collectionIDStr)
 	if err != nil {
 		return 0, err
 	}
@@ -98,7 +102,7 @@ func (o *GCPOperator) prepareNodes() error {
 		setPoolRequest := &google.SetNodePoolSizeRequest{
 			NodeCount: o.nodesRequired,
 		}
-		_, err := nodePoolService.SetSize(o.Project, o.Zone, o.ClusterID, o.makePoolName(), setPoolRequest).Do()
+		_, err := nodePoolService.SetSize(o.Project, o.Zone, o.clusterID, o.makePoolName(), setPoolRequest).Do()
 		if err != nil {
 			return err
 		}
@@ -119,7 +123,7 @@ func (o *GCPOperator) prepareNodes() error {
 	nodePool.InitialNodeCount = o.nodesRequired
 	nodePool.Name = o.makePoolName()
 	request := o.makeCreateNodePoolRequest(nodePool)
-	_, err = nodePoolService.Create(o.Project, o.Zone, o.ClusterID, request).Do()
+	_, err = nodePoolService.Create(o.Project, o.Zone, o.clusterID, request).Do()
 	if err != nil {
 		return err
 	}
@@ -128,7 +132,7 @@ func (o *GCPOperator) prepareNodes() error {
 
 func (o *GCPOperator) destroyNodes() error {
 	nodePoolService := o.service.Projects.Zones.Clusters.NodePools
-	if _, err := nodePoolService.Delete(o.Project, o.Zone, o.ClusterID, o.makePoolName()).Do(); err != nil {
+	if _, err := nodePoolService.Delete(o.Project, o.Zone, o.clusterID, o.makePoolName()).Do(); err != nil {
 		return err
 	}
 	return nil

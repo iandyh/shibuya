@@ -439,14 +439,15 @@ func (s *ShibuyaAPI) collectionDeleteHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if config.SC.ExecutorConfig.Cluster.OnDemand {
-		operator := controller.NewGCPOperator(collection.ID, 0)
+		operator := controller.NewGCPOperator(collection.ProjectID, collection.ID,
+			0, s.ctr.Scheduler.GetClusterIDByProject(collection.ProjectID))
 		pool := operator.GetNodePool()
 		if pool != nil {
 			s.handleErrors(w, makeInvalidRequestError("You cannot delete collection when you have nodes launched"))
 			return
 		}
 	}
-	if s.ctr.Scheduler.PodReadyCount(collection.ID) > 0 {
+	if s.ctr.Scheduler.PodReadyCount(collection.ProjectID, collection.ID) > 0 {
 		s.handleErrors(w, makeInvalidRequestError("You cannot launch engines when there are engines already deployed"))
 		return
 	}
@@ -567,7 +568,7 @@ func (s *ShibuyaAPI) collectionUploadHandler(w http.ResponseWriter, r *http.Requ
 			return
 		}
 	}
-	if s.ctr.Scheduler.PodReadyCount(collection.ID) > 0 {
+	if s.ctr.Scheduler.PodReadyCount(collection.ProjectID, collection.ID) > 0 {
 		currentPlans, err := collection.GetExecutionPlans()
 		if err != nil {
 			s.handleErrors(w, err)
@@ -653,7 +654,7 @@ func (s *ShibuyaAPI) collectionNodesShutdownHandler(w http.ResponseWriter, r *ht
 		s.handleErrors(w, err)
 		return
 	}
-	if s.ctr.Scheduler.PodReadyCount(collection.ID) > 0 {
+	if s.ctr.Scheduler.PodReadyCount(collection.ProjectID, collection.ID) > 0 {
 		s.handleErrors(w, makeInvalidRequestError("You cannot shut down nodes while you have engines deployed. Please purge collection first."))
 		return
 	}
@@ -665,17 +666,17 @@ func (s *ShibuyaAPI) collectionNodesShutdownHandler(w http.ResponseWriter, r *ht
 }
 
 func (s *ShibuyaAPI) planLogHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
-	collectionID, err := strconv.Atoi(params.ByName("collection_id"))
-	if err != nil {
-		s.handleErrors(w, makeInvalidResourceError("collection_id"))
-		return
-	}
 	planID, err := strconv.Atoi(params.ByName("plan_id"))
 	if err != nil {
 		s.handleErrors(w, makeInvalidResourceError("plan_id"))
 		return
 	}
-	content, err := s.ctr.Scheduler.DownloadPodLog(int64(collectionID), int64(planID))
+	collection, err := getCollection(params.ByName("collection_id"))
+	if err != nil {
+		s.handleErrors(w, err)
+		return
+	}
+	content, err := s.ctr.Scheduler.DownloadPodLog(collection.ProjectID, collection.ID, int64(planID))
 	if err != nil {
 		s.handleErrors(w, makeInvalidRequestError(err.Error()))
 		return

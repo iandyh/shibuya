@@ -54,6 +54,23 @@ func GetKubeClient() (*kubernetes.Clientset, error) {
 	return client, nil
 }
 
+func GetKubeClientByContext(context string) (*kubernetes.Clientset, error) {
+	rules := clientcmd.NewDefaultClientConfigLoadingRules()
+	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
+	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults, CurrentContext: context}
+	config := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides)
+	cfg, err := config.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	cfg.RateLimiter = newRateLimiter()
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("could not get Kubernetes client: %s", err)
+	}
+	return client, nil
+}
+
 func GetMetricsClient() (*metricsc.Clientset, error) {
 	config, err := configForContext()
 	if err != nil {

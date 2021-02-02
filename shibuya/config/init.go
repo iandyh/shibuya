@@ -33,6 +33,7 @@ type ClusterConfig struct {
 	Zone        string  `json:"zone"`
 	Region      string  `json:"region"`
 	ClusterID   string  `json:"cluster_id"`
+	Context     string  `json:"context"`
 	Kind        string  `json:"kind"`
 	APIEndpoint string  `json:"api_endpoint"`
 	NodeCPUSpec int     `json:"node_cpu_spec"`

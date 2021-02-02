@@ -145,3 +145,34 @@ func (p *Project) GetPlans() ([]*Plan, error) {
 	}
 	return r, nil
 }
+
+type ProjectContext struct {
+	ProjectID int64
+	Context   string
+	ClusterID string
+}
+
+func GetProjectContexts() ([]*ProjectContext, error) {
+	db := config.SC.DBC
+	r := []*ProjectContext{}
+	q, err := db.Prepare("select project_id, context, cluster_id from project_context")
+	if err != nil {
+		return r, err
+	}
+	defer q.Close()
+	rows, err := q.Query()
+	if err != nil {
+		return r, nil
+	}
+	defer rows.Close()
+	for rows.Next() {
+		pc := new(ProjectContext)
+		rows.Scan(&pc.ProjectID, &pc.Context, &pc.ClusterID)
+		r = append(r, pc)
+	}
+	err = rows.Err()
+	if err != nil {
+		return r, nil
+	}
+	return r, nil
+}

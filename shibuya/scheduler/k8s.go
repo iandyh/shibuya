@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -33,16 +34,59 @@ type K8sClientManager struct {
 	serviceAccount string
 }
 
+var (
+	clientMap   sync.Map
+	kubectlLock sync.Mutex
+)
+
+type projectContext struct {
+	clusterID string
+	context   string
+	client    *kubernetes.Clientset
+}
+
+func fetchProjectContexts() {
+	contexts, err := model.GetProjectContexts()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, pc := range contexts {
+		client, err := config.GetKubeClientByContext(pc.Context)
+		if err != nil {
+			log.Print(err)
+		}
+		log.Printf("Store client %s for %d", pc.Context, pc.ProjectID)
+		clientMap.Store(pc.ProjectID, &projectContext{
+			client:    client,
+			clusterID: pc.ClusterID,
+			context:   pc.Context,
+		})
+	}
+	cfg := config.SC.ExecutorConfig.Cluster
+	client, err := config.GetKubeClientByContext(cfg.Context)
+	if err != nil {
+		log.Print("Cannot create default client %v", err)
+	}
+	clientMap.Store(0, &projectContext{
+		clusterID: cfg.ClusterID,
+		context:   cfg.Context,
+		client:    client,
+	})
+}
+
 func NewK8sClientManager(cfg *config.ClusterConfig) *K8sClientManager {
 	c, err := config.GetKubeClient()
 	if err != nil {
 		log.Warning(err)
 	}
 	metricsc, err := config.GetMetricsClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fetchProjectContexts()
 	return &K8sClientManager{
 		config.SC.ExecutorConfig, c, metricsc, "shibuya-ingress-serviceaccount",
 	}
-
 }
 
 func makeNodeAffinity(key, value string) *apiv1.NodeAffinity {
@@ -160,8 +204,8 @@ func (kcm *K8sClientManager) generateEngineDeployment(engineName string, labels 
 	return deployment
 }
 
-func (kcm *K8sClientManager) deploy(deployment *appsv1.Deployment) error {
-	deploymentsClient := kcm.client.AppsV1().Deployments(kcm.Namespace)
+func (kcm *K8sClientManager) deploy(deployment *appsv1.Deployment, client *kubernetes.Clientset) error {
+	deploymentsClient := client.AppsV1().Deployments(kcm.Namespace)
 	_, err := deploymentsClient.Create(deployment)
 	if errors.IsAlreadyExists(err) {
 		// do nothing if already exists
@@ -172,7 +216,32 @@ func (kcm *K8sClientManager) deploy(deployment *appsv1.Deployment) error {
 	return nil
 }
 
-func (kcm *K8sClientManager) expose(name string, deployment *appsv1.Deployment) error {
+func (kcm *K8sClientManager) loadClientCache(projectID int64) *projectContext {
+	raw, ok := clientMap.Load(projectID)
+	if !ok {
+		raw, _ := clientMap.Load(0)
+		return raw.(*projectContext)
+	}
+	return raw.(*projectContext)
+}
+
+func (kcm *K8sClientManager) findClientByProject(projectID int64) *kubernetes.Clientset {
+	// TODO: need to deal with newly created projects
+	pc := kcm.loadClientCache(projectID)
+	return pc.client
+}
+
+func (kcm *K8sClientManager) findContextByProject(projectID int64) string {
+	pc := kcm.loadClientCache(projectID)
+	return pc.context
+}
+
+func (kcm *K8sClientManager) GetClusterIDByProject(projectID int64) string {
+	pc := kcm.loadClientCache(projectID)
+	return pc.clusterID
+}
+
+func (kcm *K8sClientManager) expose(client *kubernetes.Clientset, name string, deployment *appsv1.Deployment) error {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
@@ -200,7 +269,7 @@ func (kcm *K8sClientManager) expose(name string, deployment *appsv1.Deployment) 
 			service.Spec.Type = apiv1.ServiceTypeLoadBalancer
 		}
 	}
-	_, err := kcm.client.CoreV1().Services(kcm.Namespace).Create(service)
+	_, err := client.CoreV1().Services(kcm.Namespace).Create(service)
 	if errors.IsAlreadyExists(err) {
 		return nil
 	} else if err != nil {
@@ -209,8 +278,8 @@ func (kcm *K8sClientManager) expose(name string, deployment *appsv1.Deployment) 
 	return nil
 }
 
-func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
-	podList, err := kcm.client.CoreV1().Pods(kcm.Namespace).
+func (kcm *K8sClientManager) getRandomHostIP(client *kubernetes.Clientset) (string, error) {
+	podList, err := client.CoreV1().Pods(kcm.Namespace).
 		List(metav1.ListOptions{
 			Limit: 1,
 		})
@@ -225,40 +294,33 @@ func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
 	}
 }
 
-func (kcm *K8sClientManager) CreateService(serviceName string, engine appsv1.Deployment) error {
-	err := kcm.expose(serviceName, &engine)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
-}
-
 func (kcm *K8sClientManager) DeployEngine(projectID, collectionID, planID int64,
 	engineID int, containerConfig *config.ExecutorContainer) error {
 	engineName := makeEngineName(projectID, collectionID, planID, engineID)
 	labels := makeEngineLabel(projectID, collectionID, planID, engineName)
 	affinity := prepareAffinity(collectionID)
 	engineConfig := kcm.generateEngineDeployment(engineName, labels, containerConfig, affinity)
-	if err := kcm.deploy(&engineConfig); err != nil {
+	client := kcm.findClientByProject(projectID)
+	if err := kcm.deploy(&engineConfig, client); err != nil {
 		return err
 	}
 	engineSvcName := makeServiceName(projectID, collectionID, planID, engineID)
-	if err := kcm.CreateService(engineSvcName, engineConfig); err != nil {
+	if err := kcm.expose(client, engineSvcName, &engineConfig); err != nil {
 		return err
 	}
 	ingressClass := makeIngressClass(collectionID)
 	ingressName := makeIngressName(projectID, collectionID, planID, engineID)
-	if err := kcm.CreateIngress(ingressClass, ingressName, engineSvcName, collectionID, projectID); err != nil {
+	if err := kcm.CreateIngress(client, ingressClass, ingressName, engineSvcName, collectionID, projectID); err != nil {
 		return err
 	}
 	log.Printf("Finish creating one engine for %s", engineName)
 	return nil
 }
 
-func (kcm *K8sClientManager) GetIngressUrl(collectionID int64) (string, error) {
+func (kcm *K8sClientManager) GetIngressUrl(projectID, collectionID int64) (string, error) {
+	client := kcm.findClientByProject(projectID)
 	igName := makeIngressClass(collectionID)
-	serviceClient, err := kcm.client.CoreV1().Services(kcm.Namespace).
+	serviceClient, err := client.CoreV1().Services(kcm.Namespace).
 		Get(igName, metav1.GetOptions{})
 	if err != nil {
 		return "", makeSchedulerIngressError(err)
@@ -273,7 +335,7 @@ func (kcm *K8sClientManager) GetIngressUrl(collectionID int64) (string, error) {
 		}
 		return serviceClient.Status.LoadBalancer.Ingress[0].IP, nil
 	}
-	ip_addr, err := kcm.getRandomHostIP()
+	ip_addr, err := kcm.getRandomHostIP(client)
 	if err != nil {
 		return "", makeSchedulerIngressError(err)
 	}
@@ -281,8 +343,8 @@ func (kcm *K8sClientManager) GetIngressUrl(collectionID int64) (string, error) {
 	return fmt.Sprintf("%s:%d", ip_addr, exposedPort), nil
 }
 
-func (kcm *K8sClientManager) GetPods(labelSelector, fieldSelector string) ([]apiv1.Pod, error) {
-	podsClient, err := kcm.client.CoreV1().Pods(kcm.Namespace).
+func (kcm *K8sClientManager) GetPods(client *kubernetes.Clientset, labelSelector, fieldSelector string) ([]apiv1.Pod, error) {
+	podsClient, err := client.CoreV1().Pods(kcm.Namespace).
 		List(metav1.ListOptions{
 			LabelSelector: labelSelector,
 			FieldSelector: fieldSelector,
@@ -293,9 +355,9 @@ func (kcm *K8sClientManager) GetPods(labelSelector, fieldSelector string) ([]api
 	return podsClient.Items, nil
 }
 
-func (kcm *K8sClientManager) GetPodsByCollection(collectionID int64, fieldSelector string) []apiv1.Pod {
+func (kcm *K8sClientManager) GetPodsByCollection(client *kubernetes.Clientset, collectionID int64, fieldSelector string) []apiv1.Pod {
 	labelSelector := fmt.Sprintf("collection=%d", collectionID)
-	pods, err := kcm.GetPods(labelSelector, fieldSelector)
+	pods, err := kcm.GetPods(client, labelSelector, fieldSelector)
 	if err != nil {
 		log.Warn(err)
 	}
@@ -303,7 +365,8 @@ func (kcm *K8sClientManager) GetPodsByCollection(collectionID int64, fieldSelect
 }
 
 func (kcm *K8sClientManager) FetchEngineUrlsByPlan(collectionID, planID int64, opts *smodel.EngineOwnerRef) ([]string, error) {
-	collectionUrl, err := kcm.GetIngressUrl(collectionID)
+	projectID := opts.ProjectID
+	collectionUrl, err := kcm.GetIngressUrl(projectID, collectionID)
 	if err != nil {
 		return nil, err
 	}
@@ -319,8 +382,9 @@ func (kcm *K8sClientManager) FetchEngineUrlsByPlan(collectionID, planID int64, o
 func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error) {
 	planStatuses := make(map[int64]*smodel.PlanStatus)
 	var engineReachable bool
+	client := kcm.findClientByProject(projectID)
 	cs := &smodel.CollectionStatus{}
-	pods := kcm.GetPodsByCollection(collectionID, "")
+	pods := kcm.GetPodsByCollection(client, collectionID, "")
 	ingressControllerDeployed := false
 	for _, ep := range eps {
 		ps := &smodel.PlanStatus{
@@ -351,7 +415,7 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 	}
 	// if it's unrechable, we can assume it's not in progress as well
 	fieldSelector := fmt.Sprintf("status.phase=Running")
-	ingressPods := kcm.GetPodsByCollection(collectionID, fieldSelector)
+	ingressPods := kcm.GetPodsByCollection(client, collectionID, fieldSelector)
 	ingressControllerDeployed = len(ingressPods) >= 1
 	if !ingressControllerDeployed || !enginesReady {
 		for _, ps := range planStatuses {
@@ -390,17 +454,17 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 	return cs, nil
 }
 
-func (kcm *K8sClientManager) GetPodsByCollectionPlan(collectionID, planID int64) ([]apiv1.Pod, error) {
+func (kcm *K8sClientManager) GetPodsByCollectionPlan(client *kubernetes.Clientset, collectionID, planID int64) ([]apiv1.Pod, error) {
 	labelSelector := fmt.Sprintf("plan=%d,collection=%d", planID, collectionID)
 	fieldSelector := ""
-	return kcm.GetPods(labelSelector, fieldSelector)
+	return kcm.GetPods(client, labelSelector, fieldSelector)
 }
 
-func (kcm *K8sClientManager) FetchLogFromPod(pod apiv1.Pod) (string, error) {
+func (kcm *K8sClientManager) FetchLogFromPod(client *kubernetes.Clientset, pod apiv1.Pod) (string, error) {
 	logOptions := &apiv1.PodLogOptions{
 		Follow: false,
 	}
-	req := kcm.client.CoreV1().RESTClient().Get().
+	req := client.CoreV1().RESTClient().Get().
 		Namespace(pod.Namespace).
 		Name(pod.Name).
 		Resource("pods").
@@ -421,20 +485,22 @@ func (kcm *K8sClientManager) FetchLogFromPod(pod apiv1.Pod) (string, error) {
 	return string(c), nil
 }
 
-func (kcm *K8sClientManager) DownloadPodLog(collectionID, planID int64) (string, error) {
-	pods, err := kcm.GetPodsByCollectionPlan(collectionID, planID)
+func (kcm *K8sClientManager) DownloadPodLog(projectID, collectionID, planID int64) (string, error) {
+	client := kcm.findClientByProject(projectID)
+	pods, err := kcm.GetPodsByCollectionPlan(client, collectionID, planID)
 	if err != nil {
 		return "", err
 	}
 	if len(pods) > 0 {
-		return kcm.FetchLogFromPod(pods[0])
+		return kcm.FetchLogFromPod(client, pods[0])
 	}
 	return "", fmt.Errorf("Cannot find pod for the plan %d", planID)
 }
 
-func (kcm *K8sClientManager) PodReadyCount(collectionID int64) int {
+func (kcm *K8sClientManager) PodReadyCount(projectID, collectionID int64) int {
+	client := kcm.findClientByProject(projectID)
 	label := makeCollectionLabel(collectionID)
-	podsClient, err := kcm.client.CoreV1().Pods(kcm.Namespace).
+	podsClient, err := client.CoreV1().Pods(kcm.Namespace).
 		List(metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s", label),
 		})
@@ -460,11 +526,20 @@ func (kcm *K8sClientManager) ServiceReachable(engineUrl string) bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func (kcm *K8sClientManager) deleteService(collectionID int64) error {
+func (kcm *K8sClientManager) deleteService(context string, collectionID int64) error {
 	// Delete services by collection is not supported as of yet
 	// Wait for this PR to be merged - https://github.com/kubernetes/kubernetes/pull/85802
-	cmd := exec.Command("kubectl", "-n", kcm.Namespace, "delete", "svc", "--force", "--grace-period=0", "-l", fmt.Sprintf("collection=%d", collectionID))
+	kubectlLock.Lock()
+	defer kubectlLock.Unlock()
+
+	cmd := exec.Command("kubectl", "config", "use-context", context)
 	o, err := cmd.Output()
+	if err != nil {
+		log.Printf("Cannot switch context for %s", context)
+		return err
+	}
+	cmd = exec.Command("kubectl", "-n", kcm.Namespace, "delete", "svc", "--force", "--grace-period=0", "-l", fmt.Sprintf("collection=%d", collectionID))
+	o, err = cmd.Output()
 	if err != nil {
 		log.Printf("Cannot delete services for collection %d", collectionID)
 		return err
@@ -473,8 +548,8 @@ func (kcm *K8sClientManager) deleteService(collectionID int64) error {
 	return nil
 }
 
-func (kcm *K8sClientManager) deleteDeployment(collectionID int64) error {
-	deploymentsClient := kcm.client.AppsV1().Deployments(kcm.Namespace)
+func (kcm *K8sClientManager) deleteDeployment(client *kubernetes.Clientset, collectionID int64) error {
+	deploymentsClient := client.AppsV1().Deployments(kcm.Namespace)
 	err := deploymentsClient.DeleteCollection(&metav1.DeleteOptions{
 		GracePeriodSeconds: new(int64),
 	}, metav1.ListOptions{
@@ -487,16 +562,18 @@ func (kcm *K8sClientManager) deleteDeployment(collectionID int64) error {
 	return nil
 }
 
-func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
-	err := kcm.deleteDeployment(collectionID)
+func (kcm *K8sClientManager) PurgeCollection(projectID int64, collectionID int64) error {
+	client := kcm.findClientByProject(projectID)
+	err := kcm.deleteDeployment(client, collectionID)
 	if err != nil {
 		return err
 	}
-	err = kcm.deleteService(collectionID)
+	context := kcm.findContextByProject(projectID)
+	err = kcm.deleteService(context, collectionID)
 	if err != nil {
 		return err
 	}
-	err = kcm.deleteIngressRules(collectionID)
+	err = kcm.deleteIngressRules(client, collectionID)
 	if err != nil {
 		return err
 	}
@@ -592,7 +669,7 @@ func (kcm *K8sClientManager) generateControllerDeployment(igName string, collect
 	return deployment
 }
 
-func (kcm *K8sClientManager) ApplyIngressPrerequisite() {
+func (kcm *K8sClientManager) ApplyIngressPrerequisite(projectID int64) {
 	mandatory := fmt.Sprintf("/ingress/mandatory.yaml")
 	namespace := kcm.Namespace
 	cmd := exec.Command("kubectl", "-n", namespace, "apply", "-f", mandatory)
@@ -602,7 +679,8 @@ func (kcm *K8sClientManager) ApplyIngressPrerequisite() {
 		log.Error(err)
 	}
 	log.Print(string(o))
-	err = kcm.CreateRoleBinding()
+	client := kcm.findClientByProject(projectID)
+	err = kcm.CreateRoleBinding(client)
 	if err != nil {
 		log.Error(err)
 	}
@@ -610,19 +688,20 @@ func (kcm *K8sClientManager) ApplyIngressPrerequisite() {
 }
 
 func (kcm *K8sClientManager) ExposeCollection(projectID, collectionID int64) error {
-	kcm.ApplyIngressPrerequisite()
+	//kcm.ApplyIngressPrerequisite()
 	igName := makeIngressClass(collectionID)
 	deployment := kcm.generateControllerDeployment(igName, collectionID, projectID)
-	if err := kcm.deploy(&deployment); err != nil {
+	client := kcm.findClientByProject(projectID)
+	if err := kcm.deploy(&deployment, client); err != nil {
 		return err
 	}
-	if err := kcm.expose(igName, &deployment); err != nil {
+	if err := kcm.expose(client, igName, &deployment); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (kcm *K8sClientManager) CreateIngress(ingressClass, ingressName, serviceName string, collectionID, projectID int64) error {
+func (kcm *K8sClientManager) CreateIngress(client *kubernetes.Clientset, ingressClass, ingressName, serviceName string, collectionID, projectID int64) error {
 	ingressRule := extbeta1.IngressRule{}
 	ingressRule.HTTP = &extbeta1.HTTPIngressRuleValue{
 		Paths: []extbeta1.HTTPIngressPath{
@@ -652,23 +731,23 @@ func (kcm *K8sClientManager) CreateIngress(ingressClass, ingressName, serviceNam
 			Rules: []extbeta1.IngressRule{ingressRule},
 		},
 	}
-	_, err := kcm.client.ExtensionsV1beta1().Ingresses(kcm.Namespace).Create(&ingress)
+	_, err := client.ExtensionsV1beta1().Ingresses(kcm.Namespace).Create(&ingress)
 	if err != nil {
 		log.Error(err)
 	}
 	return nil
 }
 
-func (kcm *K8sClientManager) deleteIngressRules(collectionID int64) error {
+func (kcm *K8sClientManager) deleteIngressRules(client *kubernetes.Clientset, collectionID int64) error {
 	deletePolicy := metav1.DeletePropagationForeground
-	return kcm.client.ExtensionsV1beta1().Ingresses(kcm.Namespace).DeleteCollection(&metav1.DeleteOptions{
+	return client.ExtensionsV1beta1().Ingresses(kcm.Namespace).DeleteCollection(&metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
 	}, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("collection=%d", collectionID),
 	})
 }
 
-func (kcm *K8sClientManager) CreateRoleBinding() error {
+func (kcm *K8sClientManager) CreateRoleBinding(client *kubernetes.Clientset) error {
 	namespace := kcm.Namespace
 	nginxRoleBinding := &rbacv1.RoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
@@ -687,7 +766,7 @@ func (kcm *K8sClientManager) CreateRoleBinding() error {
 			Name:     "shibuya-ingress-role",
 		},
 	}
-	_, err := kcm.client.RbacV1().RoleBindings(namespace).Create(nginxRoleBinding)
+	_, err := client.RbacV1().RoleBindings(namespace).Create(nginxRoleBinding)
 	if errors.IsAlreadyExists(err) {
 		return nil
 	}
@@ -697,15 +776,16 @@ func (kcm *K8sClientManager) CreateRoleBinding() error {
 	return nil
 }
 
-func (kcm *K8sClientManager) GetNodesByCollection(collectionID string) ([]apiv1.Node, error) {
+func (kcm *K8sClientManager) GetNodesByCollection(projectID int64, collectionID string) ([]apiv1.Node, error) {
+	client := kcm.findClientByProject(projectID)
 	opts := metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("collection_id=%s", collectionID),
 	}
-	return kcm.getNodes(opts)
+	return kcm.getNodes(client, opts)
 }
 
-func (kcm *K8sClientManager) getNodes(opts metav1.ListOptions) ([]apiv1.Node, error) {
-	nodeList, err := kcm.client.CoreV1().Nodes().List(opts)
+func (kcm *K8sClientManager) getNodes(client *kubernetes.Clientset, opts metav1.ListOptions) ([]apiv1.Node, error) {
+	nodeList, err := client.CoreV1().Nodes().List(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -714,39 +794,45 @@ func (kcm *K8sClientManager) getNodes(opts metav1.ListOptions) ([]apiv1.Node, er
 
 func (kcm *K8sClientManager) GetAllNodesInfo() (smodel.AllNodesInfo, error) {
 	opts := metav1.ListOptions{}
-	nodes, err := kcm.getNodes(opts)
-	if err != nil {
-		return nil, err
-	}
 	r := make(smodel.AllNodesInfo)
-	for _, node := range nodes {
-		nodeInfo := r[node.ObjectMeta.Labels["collection_id"]]
-		if nodeInfo == nil {
-			nodeInfo = &smodel.NodesInfo{}
-			r[node.ObjectMeta.Labels["collection_id"]] = nodeInfo
+	clientMap.Range(func(key interface{}, value interface{}) bool {
+		client := value.(*projectContext).client
+		nodes, err := kcm.getNodes(client, opts)
+		if err == nil {
+			for _, node := range nodes {
+				nodeInfo := r[node.ObjectMeta.Labels["collection_id"]]
+				if nodeInfo == nil {
+					nodeInfo = &smodel.NodesInfo{}
+					r[node.ObjectMeta.Labels["collection_id"]] = nodeInfo
+				}
+				nodeInfo.Size++
+				if nodeInfo.LaunchTime.IsZero() || nodeInfo.LaunchTime.After(node.ObjectMeta.CreationTimestamp.Time) {
+					nodeInfo.LaunchTime = node.ObjectMeta.CreationTimestamp.Time
+				}
+			}
 		}
-		nodeInfo.Size++
-		if nodeInfo.LaunchTime.IsZero() || nodeInfo.LaunchTime.After(node.ObjectMeta.CreationTimestamp.Time) {
-			nodeInfo.LaunchTime = node.ObjectMeta.CreationTimestamp.Time
-		}
-	}
+		return true
+	})
 	return r, nil
 }
 
 func (kcm *K8sClientManager) GetDeployedCollections() (map[int64]time.Time, error) {
-	labelSelector := fmt.Sprintf("kind=executor")
-	pods, err := kcm.GetPods(labelSelector, "")
-	if err != nil {
-		return nil, err
-	}
 	deployedCollections := make(map[int64]time.Time)
-	for _, pod := range pods {
-		collectionID, err := strconv.ParseInt(pod.Labels["collection"], 10, 64)
-		if err != nil {
-			return nil, err
+	clientMap.Range(func(key interface{}, value interface{}) bool {
+		client := value.(*projectContext).client
+		labelSelector := fmt.Sprintf("kind=executor")
+		pods, err := kcm.GetPods(client, labelSelector, "")
+		if err == nil {
+			for _, pod := range pods {
+				collectionID, err := strconv.ParseInt(pod.Labels["collection"], 10, 64)
+				if err == nil {
+					deployedCollections[collectionID] = pod.CreationTimestamp.Time
+				}
+			}
 		}
-		deployedCollections[collectionID] = pod.CreationTimestamp.Time
-	}
+		return true
+	})
+
 	return deployedCollections, nil
 }
 
