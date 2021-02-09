@@ -776,10 +776,10 @@ func (kcm *K8sClientManager) CreateRoleBinding(client *kubernetes.Clientset) err
 	return nil
 }
 
-func (kcm *K8sClientManager) GetNodesByCollection(projectID int64, collectionID string) ([]apiv1.Node, error) {
+func (kcm *K8sClientManager) GetNodesByCollection(projectID, collectionID int64) ([]apiv1.Node, error) {
 	client := kcm.findClientByProject(projectID)
 	opts := metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("collection_id=%s", collectionID),
+		LabelSelector: fmt.Sprintf("collection_id=%d", collectionID),
 	}
 	return kcm.getNodes(client, opts)
 }

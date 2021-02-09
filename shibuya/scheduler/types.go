@@ -23,6 +23,7 @@ type EngineScheduler interface {
 	PodReadyCount(projectID, collectionID int64) int
 	DownloadPodLog(projectID, collectionID, planID int64) (string, error)
 	GetClusterIDByProject(projectID int64) string
+	GetNodesByCollection(projectID, collectionID int64) ([]apiv1.Node, error)
 }
 
 var FeatureUnavailable = errors.New("Feature unavailable")

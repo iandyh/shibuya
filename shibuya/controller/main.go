@@ -185,11 +185,15 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 		enginesCount += e.Engines
 	}
 	if config.SC.ExecutorConfig.Cluster.OnDemand {
+		currentNodes, err := c.Scheduler.GetNodesByCollection(collection.ProjectID, collection.ID)
+		if err != nil {
+			return err
+		}
+		currentNodesCount := len(currentNodes)
 		nodesCount = c.calNodesRequired(enginesCount)
 		clusterID := c.Scheduler.GetClusterIDByProject(collection.ProjectID)
-		log.Print(clusterID)
 		operator := NewGCPOperator(collection.ProjectID, collection.ID, nodesCount, clusterID)
-		err := operator.prepareNodes()
+		err = operator.prepareNodes(currentNodesCount)
 		if err != nil {
 			return err
 		}
@@ -233,6 +237,11 @@ func (c *Controller) CollectionStatus(collection *model.Collection) (*smodel.Col
 		return nil, err
 	}
 	if config.SC.ExecutorConfig.Cluster.OnDemand {
+		nodes, err := c.Scheduler.GetNodesByCollection(collection.ProjectID, collection.ID)
+		if err != nil {
+			return nil, err
+		}
+		currentNodesCount := len(nodes)
 		operator := NewGCPOperator(collection.ProjectID, collection.ID, 0,
 			c.Scheduler.GetClusterIDByProject(collection.ProjectID))
 		info := operator.GCPNodesInfo()
@@ -240,12 +249,11 @@ func (c *Controller) CollectionStatus(collection *model.Collection) (*smodel.Col
 		if info != nil {
 			cs.PoolSize = info.Size
 			cs.PoolStatus = info.Status
+			if currentNodesCount > 0 {
+				cs.PoolSize = currentNodesCount
+			}
 		}
 	}
-	// if config.SC.DevMode {
-	// 	cs.PoolSize = 100
-	// 	cs.PoolStatus = "running"
-	// }
 	return cs, nil
 }
 

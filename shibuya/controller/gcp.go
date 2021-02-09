@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
-	"github.com/rakutentech/shibuya/shibuya/scheduler"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	log "github.com/sirupsen/logrus"
 	google "google.golang.org/api/container/v1"
@@ -57,15 +56,6 @@ func (o *GCPOperator) GetNodePool() *google.NodePool {
 	return currentNodePool
 }
 
-func (o *GCPOperator) GetNodesSize() (int, error) {
-	kcm := scheduler.NewK8sClientManager(config.SC.ExecutorConfig.Cluster)
-	nodes, err := kcm.GetNodesByCollection(o.projectID, o.collectionIDStr)
-	if err != nil {
-		return 0, err
-	}
-	return len(nodes), nil
-}
-
 type GCPNodesInfo struct {
 	smodel.NodesInfo
 	Status string
@@ -77,27 +67,19 @@ func (o *GCPOperator) GCPNodesInfo() *GCPNodesInfo {
 		info := new(GCPNodesInfo)
 		info.Status = pool.Status
 		info.Size = int(pool.InitialNodeCount)
-		if size, err := o.GetNodesSize(); err == nil && size > 0 {
-			info.Size = size
-		}
 		return info
 	}
 	return nil
 }
 
-func (o *GCPOperator) prepareNodes() error {
+func (o *GCPOperator) prepareNodes(currentNodesCount int) error {
 	nodePoolService := o.service.Projects.Zones.Clusters.NodePools
 	currentNodePool := o.GetNodePool()
 	// If we already have nodes provisioned, we don't need to do anything
-	t, err := o.GetNodesSize()
-	if err != nil {
-		return err
-	}
-	poolSize := int64(t)
-	if poolSize >= o.nodesRequired {
+	if int64(currentNodesCount) >= o.nodesRequired {
 		return nil
 	}
-	if currentNodePool != nil && poolSize < o.nodesRequired {
+	if currentNodePool != nil && int64(currentNodesCount) < o.nodesRequired {
 		currentNodePool.InitialNodeCount = o.nodesRequired
 		setPoolRequest := &google.SetNodePoolSizeRequest{
 			NodeCount: o.nodesRequired,
@@ -123,7 +105,7 @@ func (o *GCPOperator) prepareNodes() error {
 	nodePool.InitialNodeCount = o.nodesRequired
 	nodePool.Name = o.makePoolName()
 	request := o.makeCreateNodePoolRequest(nodePool)
-	_, err = nodePoolService.Create(o.Project, o.Zone, o.clusterID, request).Do()
+	_, err := nodePoolService.Create(o.Project, o.Zone, o.clusterID, request).Do()
 	if err != nil {
 		return err
 	}
