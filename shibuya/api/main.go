@@ -774,6 +774,19 @@ func (s *ShibuyaAPI) usageHandler(w http.ResponseWriter, r *http.Request, _ http
 	//w.Write([]byte(fmt.Sprintf("%f", total)))
 }
 
+func (s *ShibuyaAPI) updateProjectSidHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	r.ParseForm()
+	pid := r.Form.Get("project_id")
+	projectID, _ := strconv.ParseInt(pid, 10, 64)
+	p, err := model.GetProject(projectID)
+	if err != nil {
+		s.jsonise(w, http.StatusNotFound, nil)
+		return
+	}
+	sid := r.Form.Get("service_id")
+	p.UpdateSid(sid)
+}
+
 type Route struct {
 	Name        string
 	Method      string
@@ -826,5 +839,6 @@ func (s *ShibuyaAPI) InitRoutes() Routes {
 		&Route{"admin_collections", "GET", "/api/admin/collections", s.collectionAdminGetHandler},
 		&Route{"usage_summary", "GET", "/api/admin/usage_summary", s.usageSummaryHandler},
 		&Route{"shibuya_usage", "GET", "/api/admin/usage", s.usageHandler},
+		&Route{"project_sid", "PUT", "/api/admin/project_sid", s.updateProjectSidHandler},
 	}
 }

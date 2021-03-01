@@ -145,3 +145,17 @@ func (p *Project) GetPlans() ([]*Plan, error) {
 	}
 	return r, nil
 }
+
+func (p *Project) UpdateSid(sid string) error {
+	db := config.SC.DBC
+	q, err := db.Prepare("update project set sid=? where id=?")
+	if err != nil {
+		return err
+	}
+	defer q.Close()
+
+	if _, err := q.Exec(sid, p.ID); err != nil {
+		return err
+	}
+	return nil
+}
