@@ -2,6 +2,7 @@ package model
 
 import (
 	"log"
+	"math"
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -99,8 +100,9 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 			}
 		}
 		duration := h.EndTime.Sub(h.StartedTime)
-		engineHours := duration.Hours() * float64(h.Engines)
-		nodeHours := duration.Hours() * float64(h.Nodes)
+		billingHours := math.Ceil(duration.Hours())
+		engineHours := billingHours * float64(h.Engines)
+		nodeHours := billingHours * float64(h.Nodes)
 		teh[h.Context] += engineHours
 		tnh[h.Context] += nodeHours
 		if m, ok := ehe[sid]; !ok {
