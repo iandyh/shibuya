@@ -9,9 +9,10 @@ import (
 )
 
 type Project struct {
-	ID          int64         `json:"id"`
-	Name        string        `json:"name"`
-	Owner       string        `json:"owner"`
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	Owner       string `json:"owner"`
+	Sid         string
 	CreatedTime time.Time     `json:"created_time"`
 	Collections []*Collection `json:"collections"`
 	Plans       []*Plan       `json:"plans"`
@@ -41,7 +42,7 @@ func GetProjectsByOwners(owners []string) ([]*Project, error) {
 		s := fmt.Sprintf("'%s'", o)
 		qs = append(qs, s)
 	}
-	query := fmt.Sprintf("select id, name, owner, created_time from project where owner in (%s)",
+	query := fmt.Sprintf("select id, name, owner, sid, created_time from project where owner in (%s)",
 		strings.Join(qs, ","))
 	q, err := db.Prepare(query)
 	if err != nil {
@@ -55,7 +56,7 @@ func GetProjectsByOwners(owners []string) ([]*Project, error) {
 	defer rows.Close()
 	for rows.Next() {
 		p := new(Project)
-		rows.Scan(&p.ID, &p.Name, &p.Owner, &p.CreatedTime)
+		rows.Scan(&p.ID, &p.Name, &p.Owner, &p.Sid, &p.CreatedTime)
 		r = append(r, p)
 	}
 	err = rows.Err()
