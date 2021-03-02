@@ -15,17 +15,18 @@ type UsageSummary struct {
 }
 
 type LaunchHistory struct {
-	Context     string
-	Owner       string
-	Engines     int
-	Nodes       int
-	StartedTime time.Time
-	EndTime     time.Time
+	Context      string
+	CollectionID int64
+	Owner        string
+	Engines      int
+	Nodes        int
+	StartedTime  time.Time
+	EndTime      time.Time
 }
 
 func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	db := config.SC.DBC
-	q, err := db.Prepare("select context, owner, engines_count, nodes_count, started_time, end_time from collection_launch_history where started_time > ? and end_time < ?")
+	q, err := db.Prepare("select collection_id, context, owner, engines_count, nodes_count, started_time, end_time from collection_launch_history where started_time > ? and end_time < ?")
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +36,7 @@ func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	history := []*LaunchHistory{}
 	for rs.Next() {
 		lh := new(LaunchHistory)
-		rs.Scan(&lh.Context, &lh.Owner, &lh.Engines, &lh.Nodes, &lh.StartedTime, &lh.EndTime)
+		rs.Scan(&lh.CollectionID, &lh.Context, &lh.Owner, &lh.Engines, &lh.Nodes, &lh.StartedTime, &lh.EndTime)
 		history = append(history, lh)
 	}
 	return history, nil
@@ -52,9 +53,19 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	s.TotalNodesHours = make(map[string]float64)
 	s.Contacts = make(map[string][]string)
 	uniqueOwners := make(map[string]struct{})
+	uniqueCollections := make(map[int64]struct{})
 	for _, h := range history {
 		uniqueOwners[h.Owner] = struct{}{}
+		uniqueCollections[h.CollectionID] = struct{}{}
 		//owners = append(owners, h.Owner)
+	}
+	collectionsToProjects := make(map[int64]int64)
+	for cid, _ := range uniqueCollections {
+		c, err := GetCollection(cid)
+		if err != nil {
+			continue
+		}
+		collectionsToProjects[cid] = c.ProjectID
 	}
 	owners := []string{}
 	for o, _ := range uniqueOwners {
@@ -79,6 +90,14 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		tnh := s.TotalNodesHours
 		ehe := s.EngineHoursByOwner
 		sid, _ := ownerToSid[h.Owner]
+		if sid == "unknown" {
+			if pid, ok := collectionsToProjects[h.CollectionID]; ok {
+				p, err := GetProject(pid)
+				if err == nil && p.Sid != "" {
+					sid = p.Sid
+				}
+			}
+		}
 		duration := h.EndTime.Sub(h.StartedTime)
 		engineHours := duration.Hours() * float64(h.Engines)
 		nodeHours := duration.Hours() * float64(h.Nodes)
