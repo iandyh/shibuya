@@ -49,6 +49,15 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	s.TotalEngineHours = make(map[string]float64)
 	s.EngineHoursByOwner = make(map[string]map[string]float64)
 	s.TotalNodesHours = make(map[string]float64)
+	owners := []string{}
+	for _, h := range history {
+		owners = append(owners, h.Owner)
+	}
+	projects, _ := GetProjectsByOwners(owners)
+	ownerToSid := make(map[string]string)
+	for _, p := range projects {
+		ownerToSid[p.Owner] = p.Sid
+	}
 	for _, h := range history {
 		teh := s.TotalEngineHours
 		tnh := s.TotalNodesHours
@@ -58,9 +67,13 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		nodeHours := duration.Hours() * float64(h.Nodes)
 		teh[h.Context] += engineHours
 		tnh[h.Context] += nodeHours
-		if m, ok := ehe[h.Owner]; !ok {
-			ehe[h.Owner] = make(map[string]float64)
-			ehe[h.Owner][h.Context] += engineHours
+		sid, ok := ownerToSid[h.Owner]
+		if !ok {
+			sid = "unknown"
+		}
+		if m, ok := ehe[sid]; !ok {
+			ehe[sid] = make(map[string]float64)
+			ehe[sid][h.Context] += engineHours
 		} else {
 			m[h.Context] += engineHours
 		}
@@ -70,7 +83,6 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		all += usage
 	}
 	s.TotalEngineHours["engine_hours"] = all
-
 	return s, nil
 }
 
