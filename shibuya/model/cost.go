@@ -11,6 +11,7 @@ type UsageSummary struct {
 	TotalEngineHours   map[string]float64            `json:"total_engine_hours"`
 	TotalNodesHours    map[string]float64            `json:"total_nodes_hours"`
 	EngineHoursByOwner map[string]map[string]float64 `json:"engine_hours_by_owner"`
+	Contacts           map[string][]string           `json:"contacts"`
 }
 
 type LaunchHistory struct {
@@ -49,28 +50,40 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	s.TotalEngineHours = make(map[string]float64)
 	s.EngineHoursByOwner = make(map[string]map[string]float64)
 	s.TotalNodesHours = make(map[string]float64)
-	owners := []string{}
+	s.Contacts = make(map[string][]string)
+	uniqueOwners := make(map[string]struct{})
 	for _, h := range history {
-		owners = append(owners, h.Owner)
+		uniqueOwners[h.Owner] = struct{}{}
+		//owners = append(owners, h.Owner)
+	}
+	owners := []string{}
+	for o, _ := range uniqueOwners {
+		owners = append(owners, o)
 	}
 	projects, _ := GetProjectsByOwners(owners)
 	ownerToSid := make(map[string]string)
 	for _, p := range projects {
-		ownerToSid[p.Owner] = p.Sid
+		sid := p.Sid
+		if sid == "" {
+			sid = "unknown"
+		}
+		ownerToSid[p.Owner] = sid
+	}
+	for owner, sid := range ownerToSid {
+		contacts := s.Contacts[sid]
+		contacts = append(contacts, owner)
+		s.Contacts[sid] = contacts
 	}
 	for _, h := range history {
 		teh := s.TotalEngineHours
 		tnh := s.TotalNodesHours
 		ehe := s.EngineHoursByOwner
+		sid, _ := ownerToSid[h.Owner]
 		duration := h.EndTime.Sub(h.StartedTime)
 		engineHours := duration.Hours() * float64(h.Engines)
 		nodeHours := duration.Hours() * float64(h.Nodes)
 		teh[h.Context] += engineHours
 		tnh[h.Context] += nodeHours
-		sid, ok := ownerToSid[h.Owner]
-		if !ok {
-			sid = "unknown"
-		}
 		if m, ok := ehe[sid]; !ok {
 			ehe[sid] = make(map[string]float64)
 			ehe[sid][h.Context] += engineHours
