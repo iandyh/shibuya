@@ -827,16 +827,27 @@ func (s *ShibuyaAPI) usageHandler(w http.ResponseWriter, r *http.Request, _ http
 func (s *ShibuyaAPI) updateProjectSidHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	r.ParseForm()
 	owner := r.Form.Get("owner")
-	owners := []string{owner}
-	projects, err := model.GetProjectsByOwners(owners)
+	sid := r.Form.Get("service_id")
+	if owner != "" {
+		owners := []string{owner}
+		projects, err := model.GetProjectsByOwners(owners)
+		if err != nil {
+			s.jsonise(w, http.StatusNotFound, nil)
+			return
+		}
+		for _, p := range projects {
+			p.UpdateSid(sid)
+		}
+		return
+	}
+	pid := r.Form.Get("project_id")
+	projectID, _ := strconv.ParseInt(pid, 10, 64)
+	p, err := model.GetProject(projectID)
 	if err != nil {
 		s.jsonise(w, http.StatusNotFound, nil)
 		return
 	}
-	sid := r.Form.Get("service_id")
-	for _, p := range projects {
-		p.UpdateSid(sid)
-	}
+	p.UpdateSid(sid)
 }
 
 type Route struct {
