@@ -9,25 +9,26 @@ import (
 )
 
 type UsageSummary struct {
-	TotalEngineHours   map[string]float64            `json:"total_engine_hours"`
-	TotalNodesHours    map[string]float64            `json:"total_nodes_hours"`
-	EngineHoursByOwner map[string]map[string]float64 `json:"engine_hours_by_owner"`
-	Contacts           map[string][]string           `json:"contacts"`
+	// TotalEngineHours   map[string]float64            `json:"total_engine_hours"`
+	// TotalNodesHours    map[string]float64            `json:"total_nodes_hours"`
+	// EngineHoursByOwner map[string]map[string]float64 `json:"engine_hours_by_owner"`
+	TotalVUH   map[string]float64            `json:"total_vuh"`
+	VUHByOnwer map[string]map[string]float64 `json:"vuh_by_owner"`
+	Contacts   map[string][]string           `json:"contacts"`
 }
 
 type LaunchHistory struct {
 	Context      string
 	CollectionID int64
 	Owner        string
-	Engines      int
-	Nodes        int
+	vu           int
 	StartedTime  time.Time
 	EndTime      time.Time
 }
 
 func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	db := config.SC.DBC
-	q, err := db.Prepare("select collection_id, context, owner, engines_count, nodes_count, started_time, end_time from collection_launch_history where started_time > ? and end_time < ?")
+	q, err := db.Prepare("select collection_id, context, owner, vu, started_time, end_time from collection_launch_history2 where started_time > ? and end_time < ?")
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +38,7 @@ func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	history := []*LaunchHistory{}
 	for rs.Next() {
 		lh := new(LaunchHistory)
-		rs.Scan(&lh.CollectionID, &lh.Context, &lh.Owner, &lh.Engines, &lh.Nodes, &lh.StartedTime, &lh.EndTime)
+		rs.Scan(&lh.CollectionID, &lh.Context, &lh.Owner, &lh.vu, &lh.StartedTime, &lh.EndTime)
 		history = append(history, lh)
 	}
 	return history, nil
@@ -49,9 +50,11 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		return nil, err
 	}
 	s := new(UsageSummary)
-	s.TotalEngineHours = make(map[string]float64)
-	s.EngineHoursByOwner = make(map[string]map[string]float64)
-	s.TotalNodesHours = make(map[string]float64)
+	// s.TotalEngineHours = make(map[string]float64)
+	// s.EngineHoursByOwner = make(map[string]map[string]float64)
+	// s.TotalNodesHours = make(map[string]float64)
+	s.TotalVUH = make(map[string]float64)
+	s.VUHByOnwer = make(map[string]map[string]float64)
 	s.Contacts = make(map[string][]string)
 	uniqueOwners := make(map[string]struct{})
 	uniqueCollections := make(map[int64]struct{})
@@ -87,9 +90,11 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		s.Contacts[sid] = contacts
 	}
 	for _, h := range history {
-		teh := s.TotalEngineHours
-		tnh := s.TotalNodesHours
-		ehe := s.EngineHoursByOwner
+		// teh := s.TotalEngineHours
+		// tnh := s.TotalNodesHours
+		// ehe := s.EngineHoursByOwner
+		totalVUH := s.TotalVUH
+		vhByOwner := s.VUHByOnwer
 		sid, _ := ownerToSid[h.Owner]
 		if sid == "unknown" {
 			if pid, ok := collectionsToProjects[h.CollectionID]; ok {
@@ -101,22 +106,23 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		}
 		duration := h.EndTime.Sub(h.StartedTime)
 		billingHours := math.Ceil(duration.Hours())
-		engineHours := billingHours * float64(h.Engines)
-		nodeHours := billingHours * float64(h.Nodes)
-		teh[h.Context] += engineHours
-		tnh[h.Context] += nodeHours
-		if m, ok := ehe[sid]; !ok {
-			ehe[sid] = make(map[string]float64)
-			ehe[sid][h.Context] += engineHours
+		// engineHours := billingHours * float64(h.Engines)
+		// nodeHours := billingHours * float64(h.Nodes)
+		vuh := billingHours * float64(h.vu)
+		// teh[h.Context] += engineHours
+		// tnh[h.Context] += nodeHours
+		totalVUH[h.Context] += vuh
+		if m, ok := vhByOwner[sid]; !ok {
+			vhByOwner[sid] = make(map[string]float64)
+			vhByOwner[sid][h.Context] += vuh
 		} else {
-			m[h.Context] += engineHours
+			m[h.Context] += vuh
 		}
 	}
-	var all float64
-	for _, usage := range s.TotalEngineHours {
-		all += usage
-	}
-	s.TotalEngineHours["engine_hours"] = all
+	//var all float64
+	// for _, usage := range s.TotalVUH {
+	// 	all += usage
+	// }
 	return s, nil
 }
 
