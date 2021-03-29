@@ -50,9 +50,6 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		return nil, err
 	}
 	s := new(UsageSummary)
-	// s.TotalEngineHours = make(map[string]float64)
-	// s.EngineHoursByOwner = make(map[string]map[string]float64)
-	// s.TotalNodesHours = make(map[string]float64)
 	s.TotalVUH = make(map[string]float64)
 	s.VUHByOnwer = make(map[string]map[string]float64)
 	s.Contacts = make(map[string][]string)
@@ -61,7 +58,6 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	for _, h := range history {
 		uniqueOwners[h.Owner] = struct{}{}
 		uniqueCollections[h.CollectionID] = struct{}{}
-		//owners = append(owners, h.Owner)
 	}
 	collectionsToProjects := make(map[int64]int64)
 	for cid, _ := range uniqueCollections {
@@ -90,9 +86,6 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		s.Contacts[sid] = contacts
 	}
 	for _, h := range history {
-		// teh := s.TotalEngineHours
-		// tnh := s.TotalNodesHours
-		// ehe := s.EngineHoursByOwner
 		totalVUH := s.TotalVUH
 		vhByOwner := s.VUHByOnwer
 		sid, _ := ownerToSid[h.Owner]
@@ -105,12 +98,10 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 			}
 		}
 		duration := h.EndTime.Sub(h.StartedTime)
+
+		// if users run 0.1 hours, we should bill them based on 1 hour.
 		billingHours := math.Ceil(duration.Hours())
-		// engineHours := billingHours * float64(h.Engines)
-		// nodeHours := billingHours * float64(h.Nodes)
 		vuh := billingHours * float64(h.vu)
-		// teh[h.Context] += engineHours
-		// tnh[h.Context] += nodeHours
 		totalVUH[h.Context] += vuh
 		if m, ok := vhByOwner[sid]; !ok {
 			vhByOwner[sid] = make(map[string]float64)
@@ -119,10 +110,6 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 			m[h.Context] += vuh
 		}
 	}
-	//var all float64
-	// for _, usage := range s.TotalVUH {
-	// 	all += usage
-	// }
 	return s, nil
 }
 
