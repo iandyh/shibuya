@@ -66,6 +66,32 @@ func GetProjectsByOwners(owners []string) ([]*Project, error) {
 	return r, nil
 }
 
+func GetProjectsBySid(sid string) ([]*Project, error) {
+	db := config.SC.DBC
+	r := []*Project{}
+	query := fmt.Sprintf("select id, name, owner, sid, created_time from project where sid=%s", sid)
+	q, err := db.Prepare(query)
+	if err != nil {
+		return r, err
+	}
+	defer q.Close()
+	rows, err := q.Query()
+	if err != nil {
+		return r, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		p := new(Project)
+		rows.Scan(&p.ID, &p.Name, &p.Owner, &p.Sid, &p.CreatedTime)
+		r = append(r, p)
+	}
+	err = rows.Err()
+	if err != nil {
+		return r, err
+	}
+	return r, nil
+}
+
 func GetProject(id int64) (*Project, error) {
 	db := config.SC.DBC
 	q, err := db.Prepare("select id, name, owner, created_time from project where id=?")

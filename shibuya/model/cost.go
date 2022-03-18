@@ -21,7 +21,7 @@ type LaunchHistory struct {
 	Context      string
 	CollectionID int64
 	Owner        string
-	vu           int
+	Vu           int
 	StartedTime  time.Time
 	EndTime      time.Time
 }
@@ -38,7 +38,7 @@ func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 	history := []*LaunchHistory{}
 	for rs.Next() {
 		lh := new(LaunchHistory)
-		rs.Scan(&lh.CollectionID, &lh.Context, &lh.Owner, &lh.vu, &lh.StartedTime, &lh.EndTime)
+		rs.Scan(&lh.CollectionID, &lh.Context, &lh.Owner, &lh.Vu, &lh.StartedTime, &lh.EndTime)
 		history = append(history, lh)
 	}
 	return history, nil
@@ -101,7 +101,7 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 
 		// if users run 0.1 hours, we should bill them based on 1 hour.
 		billingHours := math.Ceil(duration.Hours())
-		vuh := billingHours * float64(h.vu)
+		vuh := billingHours * float64(h.Vu)
 		totalVUH[h.Context] += vuh
 		if m, ok := vhByOwner[sid]; !ok {
 			vhByOwner[sid] = make(map[string]float64)
@@ -111,6 +111,43 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		}
 	}
 	return s, nil
+}
+
+func GetUsageSummaryBySid(sid, startedTime, endTime string) ([]*LaunchHistory, error) {
+	sidHistory := []*LaunchHistory{}
+	history, err := GetHistory(startedTime, endTime)
+	if err != nil {
+		return sidHistory, err
+	}
+	projects, err := GetProjectsBySid(sid)
+	if err != nil {
+		return sidHistory, err
+	}
+
+	// uniqueCollections := make(map[int64]struct{})
+	// uniqueOwners := make(map[string]struct{})
+	// for _, h := range history {
+	// 	uniqueCollections[h.CollectionID] = struct{}{}
+	// 	uniqueOwners[h.Owner] = struct{}{}
+	// }
+	// owners := []string{}
+	// for o := range uniqueOwners {
+	// 	owners = append(owners, o)
+	// }
+	// projects, _ := GetProjectsByOwners(owners)
+	targetOwners := make(map[string]struct{})
+	for _, p := range projects {
+		if p.Sid == sid {
+			targetOwners[p.Owner] = struct{}{}
+		}
+	}
+	for _, h := range history {
+		if _, ok := targetOwners[h.Owner]; !ok {
+			continue
+		}
+		sidHistory = append(sidHistory, h)
+	}
+	return sidHistory, nil
 }
 
 func GetPastMonthHistory(start_run_id, end_run_id int64) ([]*RunHistory, error) {

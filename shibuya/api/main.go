@@ -813,6 +813,19 @@ func (s *ShibuyaAPI) usageSummaryHandler(w http.ResponseWriter, req *http.Reques
 	s.jsonise(w, http.StatusOK, summary)
 }
 
+func (s *ShibuyaAPI) usageSummaryHandlerBySid(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	qs := req.URL.Query()
+	st := qs.Get("started_time")
+	et := qs.Get("end_time")
+	sid := qs.Get("sid")
+	history, err := model.GetUsageSummaryBySid(sid, st, et)
+	if err != nil {
+		s.handleErrors(w, err)
+		return
+	}
+	s.jsonise(w, http.StatusOK, history)
+}
+
 func (s *ShibuyaAPI) usageHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	qs := r.URL.Query()
 	sid := qs["start_run_id"][0]
@@ -903,6 +916,7 @@ func (s *ShibuyaAPI) InitRoutes() Routes {
 
 		&Route{"admin_collections", "GET", "/api/admin/collections", s.collectionAdminGetHandler},
 		&Route{"usage_summary", "GET", "/api/admin/usage_summary", s.usageSummaryHandler},
+		&Route{"usage_summary_by_sid", "GET", "/api/admin/usage_summary_by_sid", s.usageSummaryHandlerBySid},
 		&Route{"shibuya_usage", "GET", "/api/admin/usage", s.usageHandler},
 		&Route{"project_sid", "PUT", "/api/admin/project_sid", s.updateProjectSidHandler},
 	}
