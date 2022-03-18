@@ -147,6 +147,7 @@ func GetUsageSummaryBySid(sid, startedTime, endTime string) (*UsageSummary, erro
 		billingHours := calBillingHours(h.StartedTime, h.EndTime)
 		vuh := calVUH(billingHours, float64(h.Vu))
 		usageByContext[h.Context] += vuh
+		h.BillingHours = billingHours
 	}
 	return &UsageSummary{
 		History:  sidHistory,
