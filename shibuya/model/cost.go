@@ -15,8 +15,8 @@ type UsageSummary struct {
 	TotalVUH   map[string]float64            `json:"total_vuh"`
 	VUHByOnwer map[string]map[string]float64 `json:"vuh_by_owner"`
 	Contacts   map[string][]string           `json:"contacts"`
+	History    []*LaunchHistory              `json:"launch_history"`
 }
-
 type LaunchHistory struct {
 	Context      string
 	CollectionID int64
@@ -24,6 +24,7 @@ type LaunchHistory struct {
 	Vu           int
 	StartedTime  time.Time
 	EndTime      time.Time
+	BillingHours float64
 }
 
 func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
@@ -42,6 +43,16 @@ func GetHistory(startedTime, endTime string) ([]*LaunchHistory, error) {
 		history = append(history, lh)
 	}
 	return history, nil
+}
+
+func calBillingHours(startedTime, endTime time.Time) float64 {
+	duration := endTime.Sub(startedTime)
+	billingHours := math.Ceil(duration.Hours())
+	return billingHours
+}
+
+func calVUH(billingHours, vu float64) float64 {
+	return billingHours * vu
 }
 
 func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
@@ -97,11 +108,9 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 				}
 			}
 		}
-		duration := h.EndTime.Sub(h.StartedTime)
-
 		// if users run 0.1 hours, we should bill them based on 1 hour.
-		billingHours := math.Ceil(duration.Hours())
-		vuh := billingHours * float64(h.Vu)
+		billingHours := calBillingHours(h.StartedTime, h.EndTime)
+		vuh := calVUH(billingHours, float64(h.Vu))
 		totalVUH[h.Context] += vuh
 		if m, ok := vhByOwner[sid]; !ok {
 			vhByOwner[sid] = make(map[string]float64)
@@ -113,41 +122,36 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 	return s, nil
 }
 
-func GetUsageSummaryBySid(sid, startedTime, endTime string) ([]*LaunchHistory, error) {
+func GetUsageSummaryBySid(sid, startedTime, endTime string) (*UsageSummary, error) {
 	sidHistory := []*LaunchHistory{}
 	history, err := GetHistory(startedTime, endTime)
 	if err != nil {
-		return sidHistory, err
+		return nil, err
 	}
 	projects, err := GetProjectsBySid(sid)
 	if err != nil {
-		return sidHistory, err
+		return nil, err
 	}
-
-	// uniqueCollections := make(map[int64]struct{})
-	// uniqueOwners := make(map[string]struct{})
-	// for _, h := range history {
-	// 	uniqueCollections[h.CollectionID] = struct{}{}
-	// 	uniqueOwners[h.Owner] = struct{}{}
-	// }
-	// owners := []string{}
-	// for o := range uniqueOwners {
-	// 	owners = append(owners, o)
-	// }
-	// projects, _ := GetProjectsByOwners(owners)
 	targetOwners := make(map[string]struct{})
 	for _, p := range projects {
 		if p.Sid == sid {
 			targetOwners[p.Owner] = struct{}{}
 		}
 	}
+	usageByContext := make(map[string]float64)
 	for _, h := range history {
 		if _, ok := targetOwners[h.Owner]; !ok {
 			continue
 		}
 		sidHistory = append(sidHistory, h)
+		billingHours := calBillingHours(h.StartedTime, h.EndTime)
+		vuh := calVUH(billingHours, float64(h.Vu))
+		usageByContext[h.Context] += vuh
 	}
-	return sidHistory, nil
+	return &UsageSummary{
+		History:  sidHistory,
+		TotalVUH: usageByContext,
+	}, nil
 }
 
 func GetPastMonthHistory(start_run_id, end_run_id int64) ([]*RunHistory, error) {
