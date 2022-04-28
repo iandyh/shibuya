@@ -154,7 +154,7 @@ func (c *Controller) readConnectedEngines() {
 					PlanID:       metric.planID,
 					Raw:          metric.raw,
 				}
-				time.Sleep(1 * time.Second)
+				time.Sleep(60 * time.Second)
 				config.StatusCounter.WithLabelValues(metric.collectionID, metric.planID, runID, engineID, label, status).Inc()
 				config.CollectionLatencySummary.WithLabelValues(collectionID, runID).Observe(latency)
 				config.PlanLatencySummary.WithLabelValues(collectionID, planID, runID).Observe(latency)
