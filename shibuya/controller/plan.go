@@ -168,6 +168,7 @@ func (pc *PlanController) progress() bool {
 	}
 	for _, engine := range engines {
 		engineRunning := engine.progress()
+		log.Println(engineRunning, "engine: ", engine.EngineID())
 		r = r && !engineRunning
 	}
 	return !r
