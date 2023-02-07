@@ -91,6 +91,7 @@ func GetUsageSummary(startedTime, endTime string) (*UsageSummary, error) {
 		}
 		ownerToSid[p.Owner] = sid
 	}
+	ownerToSid["dev-ecmg-all"] = "985"
 	for owner, sid := range ownerToSid {
 		contacts := s.Contacts[sid]
 		contacts = append(contacts, owner)
