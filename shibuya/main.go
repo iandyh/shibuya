@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	_ "net/http/pprof"
+
 	"github.com/gorilla/context"
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -14,6 +16,9 @@ import (
 )
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
 	api := api.NewAPIServer()
 	routes := api.InitRoutes()
 	ui := ui.NewUI()
