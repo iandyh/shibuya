@@ -775,6 +775,10 @@ func (kcm *K8sClientManager) generateControllerDeployment(igName string, project
 									Name:  "project_id",
 									Value: fmt.Sprintf("%d", projectID),
 								},
+								{
+									Name:  "polling_interval",
+									Value: "30s",
+								},
 							},
 						},
 					},
