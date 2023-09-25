@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  shibuya:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2023-09-25T08:32:28.736917211Z"
+    description: A Helm chart for Kubernetes
+    digest: 484bcf329772e6e8710724bd079b20f6441e8a12462fdc420e4a45e1c580d972
+    name: shibuya
+    type: application
+    urls:
+    - https://github.com/iandyh/shibuya/releases/download/shibuya-0.1.0/shibuya-0.1.0.tgz
+    version: 0.1.0
+generated: "2023-09-25T08:32:28.736949111Z"
