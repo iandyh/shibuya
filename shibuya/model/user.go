@@ -48,5 +48,8 @@ func (a *Account) IsAdmin() bool {
 			}
 		}
 	}
+	if a.Name == config.SC.AuthConfig.SystemUser {
+		return true
+	}
 	return false
 }
