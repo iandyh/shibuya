@@ -74,6 +74,7 @@ func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request, params httprou
 		loginUrl := fmt.Sprintf("/login?error_msg=%v", err)
 		http.Redirect(w, r, loginUrl, http.StatusSeeOther)
 	}
+	log.Println(authResult.ML)
 	session.Values[auth.MLKey] = authResult.ML
 	session.Values[auth.AccountKey] = username
 	err = ss.Save(r, w, session)
