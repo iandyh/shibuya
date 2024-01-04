@@ -1,4 +1,4 @@
-package jobqueue
+package mq
 
 import (
 	"fmt"
@@ -16,14 +16,14 @@ func NewRedisClient(addr string) *redis.Client {
 	return rdb
 }
 
-type RedisJobQueue struct {
+type RedisMessageQueue struct {
 	c *redis.Client
 }
 
-func (rj *RedisJobQueue) Enqueue(streamName, groupName string, message map[string]interface{}) error {
+func (rmq *RedisMessageQueue) Enqueue(streamName, groupName string, message map[string]interface{}) error {
 	// create the consumer group
 	// publish the message
-	c := rj.c
+	c := rmq.c
 
 	// we need to put the group creation into process start. Not here.
 	if err := c.XGroupCreateMkStream(ctx, streamName, groupName, "$").Err(); err != nil {
@@ -39,8 +39,8 @@ func (rj *RedisJobQueue) Enqueue(streamName, groupName string, message map[strin
 }
 
 // we should return a channel of messages
-func (rj *RedisJobQueue) Dequeue(streamName, groupName, consumerID string) (chan Message, error) {
-	c := rj.c
+func (rmq *RedisMessageQueue) Dequeue(streamName, groupName, consumerID string) (chan Message, error) {
+	c := rmq.c
 	messageChan := make(chan Message)
 	go func() {
 		for {
@@ -70,20 +70,20 @@ func (rj *RedisJobQueue) Dequeue(streamName, groupName, consumerID string) (chan
 	return messageChan, nil
 }
 
-func (rj *RedisJobQueue) AckMessage(streamName, groupName, messageID string) error {
-	return rj.c.XAck(ctx, streamName, groupName, messageID).Err()
+func (rmq *RedisMessageQueue) AckMessage(streamName, groupName, messageID string) error {
+	return rmq.c.XAck(ctx, streamName, groupName, messageID).Err()
 }
 
-func (rj *RedisJobQueue) GroupPendingMessages(streamName, groupName string) (int64, error) {
-	xp, err := rj.c.XPending(ctx, streamName, groupName).Result()
+func (rmq *RedisMessageQueue) GroupPendingMessages(streamName, groupName string) (int64, error) {
+	xp, err := rmq.c.XPending(ctx, streamName, groupName).Result()
 	if err != nil {
 		return 0, err
 	}
 	return xp.Count, nil
 }
 
-func (rj *RedisJobQueue) PendingMessagesPerConsumer(streamName, groupName, consumerID string) (int64, error) {
-	xp, err := rj.c.XPending(ctx, streamName, groupName).Result()
+func (rmq *RedisMessageQueue) PendingMessagesPerConsumer(streamName, groupName, consumerID string) (int64, error) {
+	xp, err := rmq.c.XPending(ctx, streamName, groupName).Result()
 	if err != nil {
 		return 0, err
 	}

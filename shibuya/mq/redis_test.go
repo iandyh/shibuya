@@ -1,4 +1,4 @@
-package jobqueue
+package mq
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 
 var (
 	localRedis = "localhost:6379"
-	streamName = "engine_jobs"
-	groupName  = "engine_readers"
+	streamName = "messages"
+	groupName  = "messages_group"
 )
 
 func makeTestMessages(number int) []map[string]interface{} {
@@ -23,10 +23,9 @@ func makeTestMessages(number int) []map[string]interface{} {
 	return messages
 }
 
-func makeRJ() *RedisJobQueue {
+func makeRMQ() *RedisMessageQueue {
 	c := NewRedisClient(localRedis)
-	rj := &RedisJobQueue{c: c}
-	return rj
+	return &RedisMessageQueue{c: c}
 }
 
 func tearDownTest(t *testing.T) {
@@ -44,21 +43,21 @@ func TestNewRedisClient(t *testing.T) {
 
 func TestEnqueueDequeue(t *testing.T) {
 	defer tearDownTest(t)
-	rj := makeRJ()
+	rmq := makeRMQ()
 	messagesCount := 10
 	messages := makeTestMessages(messagesCount)
 	for _, j := range messages {
-		err := rj.Enqueue(streamName, groupName, j)
+		err := rmq.Enqueue(streamName, groupName, j)
 		assert.Nil(t, err)
 	}
 	resultChan := make(chan Message)
 	for i := 0; i < 10; i++ {
 		go func(index int) {
-			chanchan, err := rj.Dequeue(streamName, groupName, fmt.Sprintf("%d", index))
+			chanchan, err := rmq.Dequeue(streamName, groupName, fmt.Sprintf("%d", index))
 			assert.Nil(t, err)
 			for m := range chanchan {
 				messageID := m.MessageID
-				if err := rj.AckMessage(streamName, groupName, messageID); err != nil {
+				if err := rmq.AckMessage(streamName, groupName, messageID); err != nil {
 					t.Error(err)
 				}
 				resultChan <- m
@@ -68,7 +67,7 @@ func TestEnqueueDequeue(t *testing.T) {
 	for i := 0; i < messagesCount; i++ {
 		<-resultChan
 	}
-	pendingMessages, err := rj.GroupPendingMessages(streamName, groupName)
+	pendingMessages, err := rmq.GroupPendingMessages(streamName, groupName)
 	assert.Nil(t, err)
 	assert.Equal(t, 0, int(pendingMessages))
 	assert.Equal(t, 10, messagesCount)
