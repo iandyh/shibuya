@@ -222,6 +222,9 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 	if err != nil {
 		return err
 	}
+	if err = c.Scheduler.CreateCollectionScraper(collection.ID); err != nil {
+		return err
+	}
 	// we will assume collection deployment will always be successful
 	// For some large deployments, it might take more than 1 min to finish, which could result 504 at gateway side
 	// So we do not wait for the deployment to be finished.
