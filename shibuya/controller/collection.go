@@ -106,12 +106,6 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 				errs <- err
 				return
 			}
-			// We don't wait all the engines. Because stream establishment can take some time
-			// We don't want the UI to be freeze for long time
-			if err := pc.subscribe(&c.connectedEngines, c.readingEngines); err != nil {
-				errs <- err
-				return
-			}
 			if err := model.AddRunningPlan(collection.ID, ep.PlanID); err != nil {
 				errs <- err
 				return
@@ -151,7 +145,7 @@ func (c *Controller) TermCollection(collection *model.Collection, force bool) (e
 		go func(ep *model.ExecutionPlan) {
 			defer wg.Done()
 			pc := NewPlanController(ep, collection, nil) // we don't need scheduler here
-			if err := pc.term(force, &c.connectedEngines); err != nil {
+			if err := pc.term(force); err != nil {
 				log.Error(err)
 				e = err
 			}

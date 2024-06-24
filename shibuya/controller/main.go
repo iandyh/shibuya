@@ -16,14 +16,10 @@ import (
 )
 
 type Controller struct {
-	LabelStore         sync.Map
-	StatusStore        sync.Map
 	ApiNewClients      chan *ApiMetricStream
 	ApiStreamClients   map[string]map[string]chan *ApiMetricStreamEvent
 	ApiMetricStreamBus chan *ApiMetricStreamEvent
 	ApiClosingClients  chan *ApiMetricStream
-	readingEngines     chan shibuyaEngine
-	connectedEngines   sync.Map
 	filePath           string
 	httpClient         *http.Client
 	schedulerKind      string
@@ -40,7 +36,6 @@ func NewController() *Controller {
 		ApiClosingClients:  make(chan *ApiMetricStream),
 		ApiNewClients:      make(chan *ApiMetricStream),
 		ApiStreamClients:   make(map[string]map[string]chan *ApiMetricStreamEvent),
-		readingEngines:     make(chan shibuyaEngine),
 	}
 	c.schedulerKind = config.SC.ExecutorConfig.Cluster.Kind
 	c.Scheduler = scheduler.NewEngineScheduler(config.SC.ExecutorConfig.Cluster)
@@ -60,17 +55,8 @@ type ApiMetricStreamEvent struct {
 }
 
 func (c *Controller) StartRunning() {
-	// First we do is to resume the running plans
-	// This method should not be moved as later goroutines rely on it.
-	c.resumeRunningPlans()
 	go c.streamToApi()
-	go c.readConnectedEngines()
 	go c.fetchEngineMetrics()
-	go c.cleanLocalStore()
-	// We can only move this func to an isolated controller process later
-	// because when we are terminating, we also need to close the opening connections
-	// Otherwise we might face connection leaks
-	go c.CheckRunningThenTerminate()
 	if !config.SC.DistributedMode {
 		log.Info("Controller is running in non-distributed mode!")
 		go c.IsolateBackgroundTasks()
@@ -81,6 +67,7 @@ func (c *Controller) StartRunning() {
 // In non-distributed mode, the func will be run as a goroutine.
 func (c *Controller) IsolateBackgroundTasks() {
 	go c.AutoPurgeDeployments()
+	go c.CheckRunningThenTerminate()
 	c.AutoPurgeProjectIngressController()
 }
 
@@ -122,64 +109,6 @@ func (c *Controller) streamToApi() {
 type RunningPlan struct {
 	ep         *model.ExecutionPlan
 	collection *model.Collection
-}
-
-func (c *Controller) resumeRunningPlans() {
-	runningPlans, err := model.GetRunningPlans()
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	localCache := make(map[int64]*model.Collection)
-	for _, rp := range runningPlans {
-		var collection *model.Collection
-		var ok bool
-		collection, ok = localCache[rp.CollectionID]
-		if !ok {
-			collection, err = model.GetCollection(rp.CollectionID)
-			if err != nil {
-				continue
-			}
-			localCache[rp.CollectionID] = collection
-		}
-		ep, err := model.GetExecutionPlan(collection.ID, rp.PlanID)
-		if err != nil {
-			continue
-		}
-		pc := NewPlanController(ep, collection, c.Scheduler)
-		pc.subscribe(&c.connectedEngines, c.readingEngines)
-	}
-}
-
-func (c *Controller) readConnectedEngines() {
-	for engine := range c.readingEngines {
-		go func(engine shibuyaEngine) {
-			ch := engine.readMetrics()
-			for metric := range ch {
-				collectionID := metric.collectionID
-				planID := metric.planID
-				runID := metric.runID
-				engineID := metric.engineID
-				label := metric.label
-				status := metric.status
-				latency := metric.latency
-				threads := metric.threads
-				c.ApiMetricStreamBus <- &ApiMetricStreamEvent{
-					CollectionID: metric.collectionID,
-					PlanID:       metric.planID,
-					Raw:          metric.raw,
-				}
-				config.StatusCounter.WithLabelValues(metric.collectionID, metric.planID, runID, engineID, label, status).Inc()
-				config.CollectionLatencySummary.WithLabelValues(collectionID, runID).Observe(latency)
-				config.PlanLatencySummary.WithLabelValues(collectionID, planID, runID).Observe(latency)
-				config.LabelLatencySummary.WithLabelValues(collectionID, label, runID).Observe(latency)
-				config.ThreadsGauge.WithLabelValues(collectionID, planID, runID, engineID).Set(threads)
-
-				rid, _ := strconv.ParseInt(runID, 10, 64)
-				go c.storeLocally(rid, label, status)
-			}
-		}(engine)
-	}
 }
 
 func (c *Controller) calNodesRequired(enginesNum int) int64 {
