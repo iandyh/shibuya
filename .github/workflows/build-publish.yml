@@ -14,7 +14,7 @@ name: Build and Deploy to GCP registry
 
 on:
   push:
-    branches: [ "split", "master" ]
+    branches: [ "releases-*" ]
 
 env:
   GAR_LOCATION: asia-northeast1 # TODO: update region of the Artifact Registry
@@ -70,5 +70,6 @@ jobs:
       uses: helm/chart-releaser-action@v1.5.0
       with:
         charts_dir: shibuya/install
+        skip_existing: true
       env:
         CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
