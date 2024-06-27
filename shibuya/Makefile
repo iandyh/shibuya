@@ -1,6 +1,6 @@
 registry=$(GAR_LOCATION)-docker.pkg.dev/$(GCP_PROJECT)
 repository = shibuya
-tag=$(GITHUB_SHA)
+tag=$(GITHUB_REF_NAME)-$(GITHUB_SHA)
 img=$(registry)/$(repository)/$(component):$(tag)
 
 .PHONY: api_build
