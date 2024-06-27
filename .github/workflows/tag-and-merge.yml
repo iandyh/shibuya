@@ -1,0 +1,30 @@
+name: Tag on Merge
+
+on:
+  push:
+    branches:
+      - test-merge
+
+jobs:
+  create_tag:
+    runs-on: ubuntu-20.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+            fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+            git config user.name "$GITHUB_ACTOR"
+            git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Create and push tag
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          new_tag=${{ github.event.ref }}
+          git tag $new_tag
+          echo $new_tag
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }} $new_tag
