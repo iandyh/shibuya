@@ -1,4 +1,4 @@
-all: | cluster permissions db prometheus grafana shibuya jmeter local_storage
+all: | cluster permissions db prometheus grafana shibuya jmeter local_storage ingress-controller
 
 shibuya-controller-ns = shibuya-executors
 shibuya-executor-ns = shibuya-executors
@@ -35,11 +35,11 @@ grafana: grafana/
 
 .PHONY: shibuya
 shibuya: shibuya/ kubernetes/
-	cp shibuya/config_tmpl.json shibuya/config.json
 	cd shibuya && sh build.sh
-	docker build -f shibuya/docker-local/Dockerfile --build-arg env=local -t shibuya:local shibuya
-	kind load docker-image shibuya:local --name shibuya
-	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/shibuya.yaml --force
+	docker build -f shibuya/Dockerfile --build-arg env=local -t api:local shibuya
+	kind load docker-image api:local --name shibuya
+	helm uninstall shibuya || true
+	helm upgrade --install shibuya install/shibuya
 
 .PHONY: jmeter
 jmeter: shibuya/engines/jmeter
@@ -62,6 +62,7 @@ permissions:
 	kubectl -n $(shibuya-executor-ns) apply -f kubernetes/roles.yaml
 	kubectl -n $(shibuya-controller-ns) apply -f kubernetes/serviceaccount.yaml
 	-kubectl -n $(shibuya-executor-ns) create rolebinding shibuya --role=shibuya --serviceaccount $(shibuya-controller-ns):shibuya
+	kubectl -n $(shibuya-executor-ns) replace -f kubernetes/ingress.yaml --force
 
 .PHONY: permissions-gcp
 permissions-gcp: node-permissions permissions
@@ -77,3 +78,18 @@ local_storage:
 	docker build -t shibuya:storage local_storage
 	kind load docker-image shibuya:storage --name shibuya
 	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/storage.yaml --force
+
+.PHONY: ingress-controller
+ingress-controller:
+	# if you need to debug the controller, please use the makefile in the ingress controller folder
+	# And update the image in the config.json
+	docker build -t shibuya:ingress-controller -f ingress-controller/Dockerfile ingress-controller
+	kind load docker-image shibuya:ingress-controller --name shibuya
+
+.PHONY: controller
+controller:
+	cd shibuya && sh build.sh controller
+	docker build -f shibuya/Dockerfile --build-arg env=local --build-arg="binary_name=shibuya-controller" -t controller:local shibuya
+	kind load docker-image controller:local --name shibuya
+	helm uninstall shibuya || true
+	helm upgrade --install shibuya install/shibuya

@@ -41,8 +41,9 @@ type EngineStatus struct {
 }
 
 type CollectionDetails struct {
-	IngressIP string          `json:"ingress_ip"`
-	Engines   []*EngineStatus `json:"engines"`
+	IngressIP          string          `json:"ingress_ip"`
+	Engines            []*EngineStatus `json:"engines"`
+	ControllerReplicas int32           `json:"controller_replicas"`
 }
 
 func GetPlanStatus(collectionID int64, jobs <-chan *PlanStatus, result chan<- *PlanStatus) {

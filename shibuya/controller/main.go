@@ -44,16 +44,6 @@ func NewController() *Controller {
 	}
 	c.schedulerKind = config.SC.ExecutorConfig.Cluster.Kind
 	c.Scheduler = scheduler.NewEngineScheduler(config.SC.ExecutorConfig.Cluster)
-
-	// First we do is to resume the running plans
-	// This method should not be moved as later goroutines rely on it.
-	c.resumeRunningPlans()
-	go c.streamToApi()
-	go c.readConnectedEngines()
-	go c.checkRunningThenTerminate()
-	go c.fetchEngineMetrics()
-	go c.cleanLocalStore()
-	go c.autoPurgeDeployments()
 	return c
 }
 
@@ -67,6 +57,31 @@ type ApiMetricStreamEvent struct {
 	CollectionID string `json:"collection_id"`
 	Raw          string `json:"metrics"`
 	PlanID       string `json:"plan_id"`
+}
+
+func (c *Controller) StartRunning() {
+	// First we do is to resume the running plans
+	// This method should not be moved as later goroutines rely on it.
+	c.resumeRunningPlans()
+	go c.streamToApi()
+	go c.readConnectedEngines()
+	go c.fetchEngineMetrics()
+	go c.cleanLocalStore()
+	// We can only move this func to an isolated controller process later
+	// because when we are terminating, we also need to close the opening connections
+	// Otherwise we might face connection leaks
+	go c.CheckRunningThenTerminate()
+	if !config.SC.DistributedMode {
+		log.Info("Controller is running in non-distributed mode!")
+		go c.IsolateBackgroundTasks()
+	}
+}
+
+// In distributed mode, the func will be running as a standalone process
+// In non-distributed mode, the func will be run as a goroutine.
+func (c *Controller) IsolateBackgroundTasks() {
+	go c.AutoPurgeDeployments()
+	c.AutoPurgeProjectIngressController()
 }
 
 func (c *Controller) streamToApi() {
@@ -194,31 +209,40 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 			return err
 		}
 	}
-	owner := ""
+	sid := ""
 	if project, err := model.GetProject(collection.ProjectID); err == nil {
-		owner = project.Owner
+		sid = project.SID
 	}
-	collection.NewLaunchEntry(owner, config.SC.Context, int64(enginesCount), nodesCount, int64(vu))
-
+	if err := collection.NewLaunchEntry(sid, config.SC.Context, int64(enginesCount), nodesCount, int64(vu)); err != nil {
+		return err
+	}
 	err = utils.Retry(func() error {
-		return c.Scheduler.ExposeCollection(collection.ProjectID, collection.ID)
+		return c.Scheduler.ExposeProject(collection.ProjectID)
 	}, nil)
 	if err != nil {
 		return err
 	}
 	// we will assume collection deployment will always be successful
-	var wg sync.WaitGroup
-	for _, e := range eps {
-		wg.Add(1)
-		go func(ep *model.ExecutionPlan) {
-			defer wg.Done()
-			pc := NewPlanController(ep, collection, c.Scheduler)
-			utils.Retry(func() error {
-				return pc.deploy()
-			}, nil)
-		}(e)
-	}
-	wg.Wait()
+	// For some large deployments, it might take more than 1 min to finish, which could result 504 at gateway side
+	// So we do not wait for the deployment to be finished.
+	go func() {
+		var wg sync.WaitGroup
+		now_ := time.Now()
+		for _, e := range eps {
+			wg.Add(1)
+			go func(ep *model.ExecutionPlan) {
+				defer wg.Done()
+				pc := NewPlanController(ep, collection, c.Scheduler)
+				utils.Retry(func() error {
+					return pc.deploy()
+				}, nil)
+			}(e)
+		}
+		wg.Wait()
+		duration := time.Now().Sub(now_)
+		log.Infof("All engines deployment are finished for collection %d, total duration: %.2f seconds",
+			collection.ID, duration.Seconds())
+	}()
 	return nil
 }
 

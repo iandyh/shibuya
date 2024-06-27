@@ -13,16 +13,16 @@ func makeEngineName(projectID, collectionID, planID int64, engineID int) string 
 	return makeName("engine", projectID, collectionID, planID, engineID)
 }
 
-func makeServiceName(projectID, collectionID, planID int64, engineID int) string {
-	return makeName("service", projectID, collectionID, planID, engineID)
+func makePlanName(projectID, collectionID, planID int64) string {
+	return fmt.Sprintf("engine-%d-%d-%d", projectID, collectionID, planID)
 }
 
 func makeIngressName(projectID, collectionID, planID int64, engineID int) string {
 	return makeName("ingress", projectID, collectionID, planID, engineID)
 }
 
-func makeIngressClass(collectionID int64) string {
-	return fmt.Sprintf("ig-%d", collectionID)
+func makeIngressClass(projectID int64) string {
+	return fmt.Sprintf("ig-%d", projectID)
 }
 
 func makeBaseLabel(projectID, collectionID int64) map[string]string {
@@ -31,15 +31,30 @@ func makeBaseLabel(projectID, collectionID int64) map[string]string {
 		"project":    strconv.FormatInt(projectID, 10),
 	}
 }
-func makeIngressLabel(projectID, collectionID int64) map[string]string {
-	base := makeBaseLabel(collectionID, projectID)
+
+func makeIngressControllerLabel(projectID int64) map[string]string {
+	base := map[string]string{}
 	base["kind"] = "ingress-controller"
+	base["project"] = strconv.FormatInt(projectID, 10)
+	return base
+}
+
+func makeIngressLabel(projectID, collectionID int64) map[string]string {
+	base := map[string]string{}
+	base = makeBaseLabel(projectID, collectionID)
 	return base
 }
 
 func makeEngineLabel(projectID, collectionID, planID int64, engineName string) map[string]string {
 	base := makeBaseLabel(projectID, collectionID)
 	base["app"] = engineName
+	base["plan"] = strconv.FormatInt(planID, 10)
+	base["kind"] = "executor"
+	return base
+}
+
+func makePlanLabel(projectID, collectionID, planID int64) map[string]string {
+	base := makeBaseLabel(projectID, collectionID)
 	base["plan"] = strconv.FormatInt(planID, 10)
 	base["kind"] = "executor"
 	return base

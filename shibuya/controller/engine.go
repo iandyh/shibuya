@@ -198,6 +198,14 @@ func (be *baseEngine) updateEngineUrl(url string) {
 	be.engineUrl = url
 }
 
+func findEngineConfig(et engineType) *config.ExecutorContainer {
+	switch et {
+	case JmeterEngineType:
+		return config.SC.ExecutorConfig.JmeterContainer.ExecutorContainer
+	}
+	return nil
+}
+
 func generateEngines(enginesRequired int, planID, collectionID, projectID int64, et engineType) (engines []shibuyaEngine, err error) {
 	for i := 0; i < enginesRequired; i++ {
 		engineC := &baseEngine{
@@ -241,11 +249,13 @@ func generateEnginesWithUrl(enginesRequired int, planID, collectionID, projectID
 func (ctr *Controller) fetchEngineMetrics() {
 	for {
 		time.Sleep(5 * time.Second)
-		deployedCollections, err := ctr.Scheduler.GetDeployedCollections()
+		// compared to previous approach(getting the deploy collection from the target k8s cluster), this one can
+		// reduce the engine metrics when there are multiple controller pointing to the same cluster
+		deployedCollections, err := model.GetLaunchingCollectionByContext(config.SC.Context)
 		if err != nil {
 			continue
 		}
-		for collectionID := range deployedCollections {
+		for _, collectionID := range deployedCollections {
 			c, err := model.GetCollection(collectionID)
 			if err != nil {
 				continue
@@ -260,6 +270,7 @@ func (ctr *Controller) fetchEngineMetrics() {
 				if err != nil {
 					// Some schedulers might not have the feature to expose the metrics
 					// We will return directly
+					log.Warn(err)
 					if errors.Is(err, scheduler.FeatureUnavailable) {
 						return
 					}

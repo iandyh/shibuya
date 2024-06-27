@@ -32,6 +32,7 @@ type HomeResp struct {
 	OnDemandCluster       bool
 	IsAdmin               bool
 	ResultDashboard       string
+	EnableSid             bool
 	EngineHealthDashboard string
 	ProjectHome           string
 	UploadFileHelp        string
@@ -44,16 +45,8 @@ func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request, params httprout
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	IsAdmin := false
-outer:
-	for _, ml := range account.ML {
-		for _, admin := range config.SC.AuthConfig.AdminUsers {
-			if ml == admin {
-				IsAdmin = true
-				break outer
-			}
-		}
-	}
+	IsAdmin := account.IsAdmin()
+	enableSid := config.SC.EnableSid
 	resultDashboardURL := config.SC.DashboardConfig.Url + config.SC.DashboardConfig.RunDashboard
 	engineHealthDashboardURL := config.SC.DashboardConfig.Url + config.SC.DashboardConfig.EnginesDashboard
 	if config.SC.DashboardConfig.EnginesDashboard == "" {
@@ -63,8 +56,8 @@ outer:
 	sc := config.SC
 	gcDuration := config.SC.ExecutorConfig.Cluster.GCDuration
 	template.Execute(w, &HomeResp{account.Name, sc.BackgroundColour, sc.Context,
-		config.SC.ExecutorConfig.Cluster.OnDemand, IsAdmin, resultDashboardURL, engineHealthDashboardURL,
-		sc.ProjectHome, sc.UploadFileHelp, gcDuration})
+		config.SC.ExecutorConfig.Cluster.OnDemand, IsAdmin, resultDashboardURL, enableSid,
+		engineHealthDashboardURL, sc.ProjectHome, sc.UploadFileHelp, gcDuration})
 }
 
 func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {

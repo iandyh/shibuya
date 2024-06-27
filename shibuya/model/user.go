@@ -39,3 +39,19 @@ func GetAccountBySession(r *http.Request) *Account {
 	}
 	return a
 }
+
+func (a *Account) IsAdmin() bool {
+	for _, ml := range a.ML {
+		for _, admin := range config.SC.AuthConfig.AdminUsers {
+			if ml == admin {
+				return true
+			}
+		}
+	}
+	// systemuser is the user used for LDAP auth. If a user login with that account
+	// we can also treat it as a admin
+	if a.Name == config.SC.AuthConfig.SystemUser {
+		return true
+	}
+	return false
+}
