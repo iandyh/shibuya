@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/iandyh/shibuya/compare/v1.1.0...v1.2.0) (2024-07-03)
+
+
+### Features
+
+* add prefix to differ from main release ([fac9d0e](https://github.com/iandyh/shibuya/commit/fac9d0ed46fc31ee8ea74f0422af2770fdaec84d))
+
+
+### Bug Fixes
+
+* add missing charts ([74d804c](https://github.com/iandyh/shibuya/commit/74d804cfde97d780d98bc36d3de8d7f9daa9bbd8))
+
 ## [1.1.0](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.1.0) (2024-07-03)
 
 
