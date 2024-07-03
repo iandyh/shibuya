@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.1.0) (2024-07-03)
+
+
+### Features
+
+* upgrade go runtime to 1.18 ([c93a2a6](https://github.com/iandyh/shibuya/commit/c93a2a6b1c1bdd953978cdc41ed3b7e2c07a12c7))
+
 ## 1.0.0 (2024-07-03)
 
 
