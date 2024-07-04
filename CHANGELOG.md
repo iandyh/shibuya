@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-07-04)
+
+
+### Bug Fixes
+
+* wrong tag name ([f9ab814](https://github.com/iandyh/shibuya/commit/f9ab814d609ab447bc9feac9c0ce539fb162e257))
+
 ## 1.0.0 (2024-07-04)
 
 
