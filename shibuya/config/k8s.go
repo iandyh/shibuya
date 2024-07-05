@@ -16,11 +16,8 @@ func newRateLimiter() flowcontrol.RateLimiter {
 }
 
 // getConfig returns a Kubernetes client config for a given context.
-func getConfig() clientcmd.ClientConfig {
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	rules.DefaultClientConfig = &clientcmd.DefaultClientConfig
-	overrides := &clientcmd.ConfigOverrides{ClusterDefaults: clientcmd.ClusterDefaults}
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, overrides)
+func getConfig() (*rest.Config, error) {
+	return clientcmd.BuildConfigFromFlags("", "/root/.kube/config")
 }
 
 // configForContext creates a Kubernetes REST client configuration for a given kubeconfig context.
@@ -32,7 +29,7 @@ func configForContext() (*rest.Config, error) {
 		config, err = rest.InClusterConfig()
 	} else {
 		log.Print("Using out of cluster config")
-		config, err = getConfig().ClientConfig()
+		config, err = getConfig()
 	}
 	if err != nil {
 		return nil, fmt.Errorf("could not get Kubernetes config- %s", err)
