@@ -156,7 +156,6 @@ func (be *baseEngine) terminate(force bool) error {
 		return err
 	}
 	defer resp.Body.Close()
-	be.closeStream()
 	return nil
 }
 

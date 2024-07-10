@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"math"
 	"net/http"
 	"strconv"
@@ -16,14 +17,14 @@ import (
 )
 
 type Controller struct {
-	ApiNewClients      chan *ApiMetricStream
-	ApiStreamClients   map[string]map[string]chan *ApiMetricStreamEvent
-	ApiMetricStreamBus chan *ApiMetricStreamEvent
-	ApiClosingClients  chan *ApiMetricStream
-	filePath           string
-	httpClient         *http.Client
-	schedulerKind      string
-	Scheduler          scheduler.EngineScheduler
+	readingEngineRecords   sync.Map
+	ApiNewClients          chan *ApiMetricStream
+	ApiClosingClients      chan *ApiMetricStream
+	filePath               string
+	httpClient             *http.Client
+	schedulerKind          string
+	Scheduler              scheduler.EngineScheduler
+	clientStreamingWorkers int
 }
 
 func NewController() *Controller {
@@ -32,14 +33,20 @@ func NewController() *Controller {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		ApiMetricStreamBus: make(chan *ApiMetricStreamEvent),
-		ApiClosingClients:  make(chan *ApiMetricStream),
-		ApiNewClients:      make(chan *ApiMetricStream),
-		ApiStreamClients:   make(map[string]map[string]chan *ApiMetricStreamEvent),
+		ApiClosingClients:      make(chan *ApiMetricStream),
+		ApiNewClients:          make(chan *ApiMetricStream),
+		clientStreamingWorkers: 5,
 	}
 	c.schedulerKind = config.SC.ExecutorConfig.Cluster.Kind
 	c.Scheduler = scheduler.NewEngineScheduler(config.SC.ExecutorConfig.Cluster)
 	return c
+}
+
+type subscribeState struct {
+	cancelfunc     context.CancelFunc
+	ctx            context.Context
+	readingEngines []shibuyaEngine
+	readyToClose   chan struct{}
 }
 
 type ApiMetricStream struct {
@@ -71,34 +78,86 @@ func (c *Controller) IsolateBackgroundTasks() {
 	c.AutoPurgeProjectIngressController()
 }
 
+func (c *Controller) handleStreamForClient(item *ApiMetricStream) error {
+	log.Printf("New Incoming connection :%s", item.ClientID)
+	cid, err := strconv.ParseInt(item.CollectionID, 10, 64)
+	if err != nil {
+		return err
+	}
+	collection, err := model.GetCollection(cid)
+	if err != nil {
+		return err
+	}
+	readingEngines, err := c.SubscribeCollection(collection)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ss := subscribeState{
+		cancelfunc:     cancel,
+		ctx:            ctx,
+		readingEngines: readingEngines,
+		readyToClose:   make(chan struct{}),
+	}
+	c.readingEngineRecords.Store(item.ClientID, ss)
+	go func(readingEngines []shibuyaEngine) {
+		var wg sync.WaitGroup
+		for _, engine := range readingEngines {
+			wg.Add(1)
+			go func(e shibuyaEngine) {
+				defer wg.Done()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case metric := <-e.readMetrics():
+						if metric != nil {
+							item.StreamClient <- &ApiMetricStreamEvent{
+								CollectionID: metric.collectionID,
+								PlanID:       metric.planID,
+								Raw:          metric.raw,
+							}
+						}
+					}
+				}
+			}(engine)
+		}
+		wg.Wait()
+		ss.readyToClose <- struct{}{}
+	}(readingEngines)
+	return nil
+}
+
 func (c *Controller) streamToApi() {
+	workerQueue := make(chan *ApiMetricStream)
+	for i := 0; i < c.clientStreamingWorkers; i++ {
+		go func() {
+			for item := range workerQueue {
+				if err := c.handleStreamForClient(item); err != nil {
+					log.Error(err)
+				}
+			}
+		}()
+	}
 	for {
 		select {
 		case item := <-c.ApiNewClients:
-			collectionID := item.CollectionID
-			clientID := item.ClientID
-			if m, ok := c.ApiStreamClients[collectionID]; !ok {
-				m = make(map[string]chan *ApiMetricStreamEvent)
-				m[clientID] = item.StreamClient
-				c.ApiStreamClients[collectionID] = m
-			} else {
-				m[clientID] = item.StreamClient
-			}
-			log.Printf("A client %s connects to collection %s, start streaming", clientID, collectionID)
+			workerQueue <- item
 		case item := <-c.ApiClosingClients:
-			collectionID := item.CollectionID
 			clientID := item.ClientID
-			m := c.ApiStreamClients[collectionID]
-			close(item.StreamClient)
-			delete(m, clientID)
-			log.Printf("Client %s disconnect from the API for collection %s.", clientID, collectionID)
-		case event := <-c.ApiMetricStreamBus:
-			streamClients, ok := c.ApiStreamClients[event.CollectionID]
-			if !ok {
-				continue
-			}
-			for _, streamClient := range streamClients {
-				streamClient <- event
+			collectionID := item.CollectionID
+			if t, ok := c.readingEngineRecords.Load(clientID); ok {
+				ss := t.(subscribeState)
+				for _, e := range ss.readingEngines {
+					go func(e shibuyaEngine) {
+						e.closeStream()
+					}(e)
+				}
+				ss.cancelfunc()
+				<-ss.readyToClose
+				close(item.StreamClient)
+				c.readingEngineRecords.Delete(clientID)
+				log.Printf("Client %s disconnect from the API for collection %s.", clientID, collectionID)
 			}
 		}
 	}
@@ -152,6 +211,7 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 		return err
 	}
 	if err = c.Scheduler.CreateCollectionScraper(collection.ID); err != nil {
+		log.Error(err)
 		return err
 	}
 	// we will assume collection deployment will always be successful

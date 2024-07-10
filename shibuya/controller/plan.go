@@ -104,6 +104,41 @@ func (pc *PlanController) trigger(engineDataConfig *controllerModel.EngineDataCo
 	return nil
 }
 
+func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
+	ep := pc.ep
+	collection := pc.collection
+	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
+		JmeterEngineType, pc.scheduler)
+	if err != nil {
+		return nil, err
+	}
+	runID, err := collection.GetCurrentRun()
+	if err != nil {
+		return nil, err
+	}
+	var wg sync.WaitGroup
+	readingEngines := []shibuyaEngine{}
+	for _, engine := range engines {
+		wg.Add(1)
+		go func(engine shibuyaEngine, runID int64) {
+			defer wg.Done()
+			//After this step, the engine instance has states including stream client
+			err := engine.subscribe(runID)
+			if err != nil {
+				return
+			}
+			readingEngines = append(readingEngines, engine)
+		}(engine, runID)
+	}
+	wg.Wait()
+	log.Printf("Subscribe to Plan %d", ep.PlanID)
+	return readingEngines, err
+}
+
+func (pc *PlanController) UnSubscribe() {
+
+}
+
 // TODO. we can use the cached clients here.
 func (pc *PlanController) progress() bool {
 	r := true

@@ -518,6 +518,7 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 		if pod.Labels["kind"] == "scraper" {
 			if pod.Status.Phase == apiv1.PodRunning {
 				scraperDeployed = true
+				continue
 			}
 			continue
 		}

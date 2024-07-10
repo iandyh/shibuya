@@ -130,6 +130,29 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 	return nil
 }
 
+func (c *Controller) SubscribeCollection(collection *model.Collection) ([]shibuyaEngine, error) {
+	eps, err := collection.GetExecutionPlans()
+	if err != nil {
+		return nil, err
+	}
+	var wg sync.WaitGroup
+	connectedEngines := []shibuyaEngine{}
+	for _, executionPlan := range eps {
+		wg.Add(1)
+		go func(ep *model.ExecutionPlan) {
+			defer wg.Done()
+			pc := NewPlanController(ep, collection, c.Scheduler)
+			engines, err := pc.subscribe()
+			if err != nil {
+				return
+			}
+			connectedEngines = append(connectedEngines, engines...)
+		}(executionPlan)
+	}
+	wg.Wait()
+	return connectedEngines, nil
+}
+
 func (c *Controller) TermCollection(collection *model.Collection, force bool) (e error) {
 	eps, err := collection.GetExecutionPlans()
 	if err != nil {
@@ -144,7 +167,7 @@ func (c *Controller) TermCollection(collection *model.Collection, force bool) (e
 		wg.Add(1)
 		go func(ep *model.ExecutionPlan) {
 			defer wg.Done()
-			pc := NewPlanController(ep, collection, nil) // we don't need scheduler here
+			pc := NewPlanController(ep, collection, c.Scheduler) // we don't need scheduler here
 			if err := pc.term(force); err != nil {
 				log.Error(err)
 				e = err
