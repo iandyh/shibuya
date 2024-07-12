@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.1.0](https://github.com/iandyh/shibuya/compare/v1.0.1...v1.1.0) (2024-07-12)
+
+
+### Features
+
+* add manual service account token creation support ([15d61e2](https://github.com/iandyh/shibuya/commit/15d61e24e6b02ac5995cf145c51876ec58bca7e0))
+
+
+### Bug Fixes
+
+* fix local for api and controller ([34df0ae](https://github.com/iandyh/shibuya/commit/34df0ae43459a38868c667376ef6c8b1949869c0))
+* need to follow semantic version ([b1402d3](https://github.com/iandyh/shibuya/commit/b1402d3b5056ef1425907591b09234c450e78543))
+* remove kubectl usage in the code we do not need to download the kubectl in Dockerfile ([57a59e7](https://github.com/iandyh/shibuya/commit/57a59e7c1665e8cd538729c0051bb03922a8c5d7))
+* service name is incorrect ([297a229](https://github.com/iandyh/shibuya/commit/297a229046525758e0e74f83755f61a8c1797cfc))
+* should use release action from googleapi repo ([fd86d80](https://github.com/iandyh/shibuya/commit/fd86d8028a00358de66cd0074786164c6234d7a5))
+* should use release action from googleapi repo ([c38a4bb](https://github.com/iandyh/shibuya/commit/c38a4bb2aaeb172a4d1e44296715d950724f5008))
+* typo in the file name ([0792a85](https://github.com/iandyh/shibuya/commit/0792a851cfc9aebb03d1a7359c3bc6b98aee3107))
+* wrong defalut value type for gc period ([d246d84](https://github.com/iandyh/shibuya/commit/d246d84754a57184cb46497a67d9a2eed2fbbfc9))
+
 ## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-07-04)
 
 
