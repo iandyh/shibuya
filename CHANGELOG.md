@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0](https://github.com/iandyh/shibuya/compare/v1.0.2...v1.1.0) (2024-07-13)
+
+
+### Features
+
+* bump version ([9401875](https://github.com/iandyh/shibuya/commit/9401875747eed8a5e6388663b0c17e779fe5f0bf))
+* update chart desc ([f758eaa](https://github.com/iandyh/shibuya/commit/f758eaa1dfcf26538149e61e37267730e2420bd8))
+
+
+### Bug Fixes
+
+* need to new version of chart releaser in order to skip exsiting feature ([4eca991](https://github.com/iandyh/shibuya/commit/4eca9914cd20a11399a4d4251ab6847912e1baf2))
+
 ## [1.0.2](https://github.com/iandyh/shibuya/compare/v1.0.1...v1.0.2) (2024-07-13)
 
 
