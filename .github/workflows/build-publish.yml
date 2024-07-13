@@ -94,6 +94,7 @@ jobs:
       env:
         tag_name: ${{ needs.release-please.outputs.tag_name }}
       run: |-
+        ls -alh
         cd shibuya && make api_image component=api
 
     - name: Build controller
