@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-07-13)
+
+
+### Bug Fixes
+
+* add the ls ([ea12e3d](https://github.com/iandyh/shibuya/commit/ea12e3d65dfa5a1490679d524a9a621a815577d0))
+
 ## 1.0.0 (2024-07-13)
 
 
