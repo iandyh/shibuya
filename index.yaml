@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  shibuya-chart:
+  - apiVersion: v2
+    appVersion: 1.16.0
+    created: "2024-07-13T11:55:55.773533905Z"
+    description: Shibuya install chart
+    digest: 4cd0943703554f0ff119a05129bb65b6d3b1fcc83e7aa8068e63e83a4c13d5fc
+    name: shibuya-chart
+    type: application
+    urls:
+    - https://github.com/iandyh/shibuya/releases/download/shibuya-chart-v0.1.1/shibuya-chart-v0.1.1.tgz
+    version: v0.1.1
+generated: "2024-07-13T11:55:55.773539866Z"
