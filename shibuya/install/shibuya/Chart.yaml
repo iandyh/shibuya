@@ -1,6 +1,6 @@
 apiVersion: v2
 name: shibuya-chart
-description: A Helm chart for Kubernetes
+description: Shibuya install chart
 
 # A chart can be either an 'application' or a 'library' chart.
 #
