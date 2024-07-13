@@ -31,6 +31,30 @@ jobs:
     outputs:
       tag_name: ${{ steps.create_release.outputs.tag_name }}
     steps:
+
+    - name: Checkout
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Install Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: "v3.13.3"
+
+    - name: Configure Git
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+    - name: Run chart-releaser
+      uses: helm/chart-releaser-action@v1.5.0
+      with:
+        charts_dir: shibuya/install
+        skip_existing: true
+      env:
+        CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
     - uses: googleapis/release-please-action@v4
       id: create_release
       with:
@@ -49,13 +73,7 @@ jobs:
     runs-on: ubuntu-20.04
     environment: production
     if: ${{ needs.release-please.outputs.tag_name != '' }}
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
-
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
@@ -84,19 +102,6 @@ jobs:
       run: |-
         cd shibuya && make controller_image component=controller
 
-    - name: Configure Git
-      run: |
-        git config user.name "$GITHUB_ACTOR"
-        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
-    - name: Install Helm
-      uses: azure/setup-helm@v3
-      with:
-        version: "v3.13.3"
 
-    - name: Run chart-releaser
-      uses: helm/chart-releaser-action@v1.5.0
-      with:
-        charts_dir: shibuya/install
-      env:
-        CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
