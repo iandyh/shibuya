@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/iandyh/shibuya/compare/v1.0.1...v1.0.2) (2024-07-13)
+
+
+### Bug Fixes
+
+* add missing checkout step ([58563be](https://github.com/iandyh/shibuya/commit/58563beef038324e2b520540a779beb0efce4a59))
+
 ## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-07-13)
 
 
