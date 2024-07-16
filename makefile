@@ -44,7 +44,7 @@ shibuya: shibuya/ kubernetes/
 .PHONY: jmeter
 jmeter: shibuya/engines/jmeter
 	cd shibuya && sh build.sh jmeter
-	docker build -t shibuya:jmeter -f shibuya/docker-local/Dockerfile.engines.jmeter shibuya
+	docker build -t shibuya:jmeter -f shibuya/Dockerfile.engines.jmeter shibuya
 	kind load docker-image shibuya:jmeter --name shibuya
 
 .PHONY: expose
