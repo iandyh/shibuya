@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/iandyh/shibuya/compare/v1.1.0...v1.2.0) (2024-07-16)
+
+
+### Features
+
+* update chart description ([c5435a1](https://github.com/iandyh/shibuya/commit/c5435a10d80978d5a9734bc18cfebb20ab9e4826))
+
+
+### Bug Fixes
+
+* fix chart path ([e0c3a59](https://github.com/iandyh/shibuya/commit/e0c3a59330e6bf12c4e469d52af1a20586bdede7))
+
 ## [1.1.0](https://github.com/iandyh/shibuya/compare/v1.0.2...v1.1.0) (2024-07-13)
 
 
