@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.5](https://github.com/iandyh/shibuya/compare/v1.2.4...v1.2.5) (2024-07-17)
+
+
+### Bug Fixes
+
+* put chart release logic into a script ([6e62b84](https://github.com/iandyh/shibuya/commit/6e62b8431014d70f052289589ae5a33395c3faca))
+
 ## [1.2.4](https://github.com/iandyh/shibuya/compare/v1.2.3...v1.2.4) (2024-07-17)
 
 
