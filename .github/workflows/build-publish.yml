@@ -32,8 +32,6 @@ jobs:
       tag_name: ${{ steps.create_release.outputs.tag_name }}
     steps:
 
-
-
     - uses: googleapis/release-please-action@v4
       id: create_release
       with:
@@ -92,7 +90,7 @@ jobs:
         chart_name=$(helm inspect chart install/shibuya | awk -F': ' '/^name:/ {print $2}')
         chart_version=$(helm inspect chart install/shibuya | awk -F': ' '/^version:/ {print $2}')
         chart_output=$chart_name-$chart_version
-        gh release create v$chart_output --latest=false $chart_output.tgz
+        gh release create $chart_output --latest=false $chart_output.tgz --notes $chart_output
 
     # Build the Docker image
     # - name: Build api
