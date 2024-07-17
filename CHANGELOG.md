@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.3](https://github.com/iandyh/shibuya/compare/v1.2.2...v1.2.3) (2024-07-17)
+
+
+### Bug Fixes
+
+* title ([5527869](https://github.com/iandyh/shibuya/commit/55278696651236bc8bf353b1b20f109c18742d2a))
+
 ## [1.2.2](https://github.com/iandyh/shibuya/compare/v1.2.1...v1.2.2) (2024-07-17)
 
 
