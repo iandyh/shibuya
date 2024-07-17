@@ -89,19 +89,18 @@ jobs:
         make helm_charts
         sh chart_releaser.sh
 
-
     # Build the Docker image
-    # - name: Build api
-    #   env:
-    #     tag_name: ${{ needs.release-please.outputs.tag_name }}
-    #   run: |-
-    #     cd shibuya && make api_image component=api
+    - name: Build api
+      env:
+        tag_name: ${{ needs.release-please.outputs.tag_name }}
+      run: |-
+        cd shibuya && make api_image component=api
 
-    # - name: Build controller
-    #   env:
-    #     tag_name: ${{ needs.release-please.outputs.tag_name }}
-    #   run: |-
-    #     cd shibuya && make controller_image component=controller
+    - name: Build controller
+      env:
+        tag_name: ${{ needs.release-please.outputs.tag_name }}
+      run: |-
+        cd shibuya && make controller_image component=controller
 
 
 
