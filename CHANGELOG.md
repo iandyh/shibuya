@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.6](https://github.com/iandyh/shibuya/compare/v1.2.5...v1.2.6) (2024-07-17)
+
+
+### Bug Fixes
+
+* rest steps ([31a2e22](https://github.com/iandyh/shibuya/commit/31a2e22e20e875e30b6d8e571eb284124bbea9e3))
+
 ## [1.2.5](https://github.com/iandyh/shibuya/compare/v1.2.4...v1.2.5) (2024-07-17)
 
 
