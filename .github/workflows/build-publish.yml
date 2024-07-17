@@ -92,9 +92,9 @@ jobs:
       run: |-
         cd shibuya
         make helm_charts
-        chart_name=helm inspect chart install/shibuya | awk -F': ' '/^name:/ {print $2}'
-        chart_version=helm inspect chart install/shibuya | awk -F': ' '/^version:/ {print $2}'
-        echo $chart_name
+        chart_name=$(helm inspect chart install/shibuya | awk -F': ' '/^name:/ {print $2}')
+        chart_version=$(helm inspect chart install/shibuya | awk -F': ' '/^version:/ {print $2}')
+        echo $chart_name-$chart_version
 
     # Build the Docker image
     # - name: Build api
