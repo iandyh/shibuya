@@ -32,15 +32,7 @@ jobs:
       tag_name: ${{ steps.create_release.outputs.tag_name }}
     steps:
 
-    - name: Checkout
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
 
-    - name: Configure Git
-      run: |
-        git config user.name "$GITHUB_ACTOR"
-        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
     - uses: googleapis/release-please-action@v4
       id: create_release
@@ -81,6 +73,11 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: Configure Git
+      run: |
+        git config user.name "$GITHUB_ACTOR"
+        git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
     - name: Install Helm
       uses: azure/setup-helm@v3
       with:
@@ -94,7 +91,8 @@ jobs:
         make helm_charts
         chart_name=$(helm inspect chart install/shibuya | awk -F': ' '/^name:/ {print $2}')
         chart_version=$(helm inspect chart install/shibuya | awk -F': ' '/^version:/ {print $2}')
-        echo $chart_name-$chart_version
+        chart_output=$chart_name-$chart_version
+        gh create release v$chart_output --latest=false $chart_output.tgz
 
     # Build the Docker image
     # - name: Build api
