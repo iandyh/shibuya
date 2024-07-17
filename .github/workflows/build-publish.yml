@@ -92,7 +92,7 @@ jobs:
         chart_name=$(helm inspect chart install/shibuya | awk -F': ' '/^name:/ {print $2}')
         chart_version=$(helm inspect chart install/shibuya | awk -F': ' '/^version:/ {print $2}')
         chart_output=$chart_name-$chart_version
-        gh create release v$chart_output --latest=false $chart_output.tgz
+        gh release create v$chart_output --latest=false $chart_output.tgz
 
     # Build the Docker image
     # - name: Build api
