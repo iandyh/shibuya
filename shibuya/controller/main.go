@@ -63,7 +63,6 @@ type ApiMetricStreamEvent struct {
 
 func (c *Controller) StartRunning() {
 	go c.streamToApi()
-	go c.fetchEngineMetrics()
 	if !config.SC.DistributedMode {
 		log.Info("Controller is running in non-distributed mode!")
 		go c.IsolateBackgroundTasks()

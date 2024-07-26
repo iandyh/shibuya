@@ -32,13 +32,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
-	metricsc "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 type K8sClientManager struct {
 	*config.ExecutorConfig
 	client         *kubernetes.Clientset
-	metricClient   *metricsc.Clientset
 	serviceAccount string
 }
 
@@ -47,9 +45,8 @@ func NewK8sClientManager(cfg *config.ClusterConfig) *K8sClientManager {
 	if err != nil {
 		log.Warning(err)
 	}
-	metricsc, err := config.GetMetricsClient()
 	return &K8sClientManager{
-		config.SC.ExecutorConfig, c, metricsc, "shibuya-ingress-serviceaccount-1",
+		config.SC.ExecutorConfig, c, "shibuya-ingress-serviceaccount-1",
 	}
 
 }
@@ -1104,22 +1101,6 @@ func (kcm *K8sClientManager) GetDeployedServices() (map[int64]time.Time, error) 
 		deployedServices[projectID] = svc.CreationTimestamp.Time
 	}
 	return deployedServices, nil
-}
-
-func (kcm *K8sClientManager) GetPodsMetrics(collectionID, planID int64) (map[string]apiv1.ResourceList, error) {
-	metricsList, err := kcm.metricClient.MetricsV1beta1().PodMetricses(kcm.Namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("collection=%d,plan=%d", collectionID, planID),
-	})
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string]apiv1.ResourceList, len(metricsList.Items))
-	for _, pm := range metricsList.Items {
-		for _, cm := range pm.Containers {
-			result[getEngineNumber(pm.GetName())] = cm.Usage
-		}
-	}
-	return result, nil
 }
 
 func (kcm *K8sClientManager) GetCollectionEnginesDetail(projectID, collectionID int64) (*smodel.CollectionDetails, error) {
