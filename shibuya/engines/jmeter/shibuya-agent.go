@@ -385,18 +385,24 @@ func (sw *ShibuyaWrapper) startHandler(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusConflict)
 			return
 		}
-		file, err := ioutil.ReadAll(r.Body)
+		err := r.ParseMultipartForm(100 << 20)
 		if err != nil {
-			log.Panicln(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
+
 		}
-		defer r.Body.Close()
+		jsonPart := r.FormValue("config")
 		var edc controllerModel.EngineDataConfig
-		if err := json.Unmarshal(file, &edc); err != nil {
+		if err := json.Unmarshal([]byte(jsonPart), &edc); err != nil {
 			log.Println(err)
 			w.WriteHeader(http.StatusBadRequest)
 			return
+		}
+		for _, f := range edc.EngineData {
+			file, header, err := r.FormFile(f.Filename)
+			if err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+
 		}
 		if err := cleanTestData(); err != nil {
 			log.Println(err)

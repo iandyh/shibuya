@@ -19,8 +19,9 @@ type ShibuyaFile struct {
 	Filename     string `json:"filename"` // Name of the file - a.txt
 	Filepath     string `json:"filepath"` // Relative path of the file - /plan/22/a.txt
 	Filelink     string `json:"filelink"` // Full url for users to download the file - storage.com/shibuya/plan/22/a.txt
-	TotalSplits  int    `json:"total_splits"`
-	CurrentSplit int    `json:"current_split"`
+	FileContent  []byte
+	TotalSplits  int `json:"total_splits"`
+	CurrentSplit int `json:"current_split"`
 }
 
 type Collection struct {

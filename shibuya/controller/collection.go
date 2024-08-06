@@ -8,6 +8,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/config"
 	controllerModel "github.com/rakutentech/shibuya/shibuya/controller/model"
 	"github.com/rakutentech/shibuya/shibuya/model"
+	sos "github.com/rakutentech/shibuya/shibuya/object_storage"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,6 +18,7 @@ func prepareCollection(collection *model.Collection) []*controllerModel.EngineDa
 		EngineData: map[string]*model.ShibuyaFile{},
 	}
 	engineDataConfigs := edc.DeepCopies(planCount)
+	storageClient := sos.Client.Storage
 	for i := 0; i < planCount; i++ {
 		for _, d := range collection.Data {
 			sf := model.ShibuyaFile{
@@ -25,6 +27,11 @@ func prepareCollection(collection *model.Collection) []*controllerModel.EngineDa
 				TotalSplits:  1,
 				CurrentSplit: 0,
 			}
+			fileContent, err := storageClient.Download(sf.Filelink)
+			if err != nil {
+
+			}
+			sf.FileContent = fileContent
 			if collection.CSVSplit {
 				sf.TotalSplits = planCount
 				sf.CurrentSplit = i

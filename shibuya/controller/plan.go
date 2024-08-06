@@ -6,11 +6,13 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/beevik/etree"
 	"github.com/rakutentech/shibuya/shibuya/config"
 	controllerModel "github.com/rakutentech/shibuya/shibuya/controller/model"
 	"github.com/rakutentech/shibuya/shibuya/model"
+	sos "github.com/rakutentech/shibuya/shibuya/object_storage"
 	"github.com/rakutentech/shibuya/shibuya/scheduler"
-	_ "github.com/rakutentech/shibuya/shibuya/utils"
+	utils "github.com/rakutentech/shibuya/shibuya/utils"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -37,11 +39,96 @@ func (pc *PlanController) deploy() error {
 	return nil
 }
 
+func GetThreadGroups(planDoc *etree.Document) ([]*etree.Element, error) {
+	jtp := planDoc.SelectElement("jmeterTestPlan")
+	if jtp == nil {
+		return nil, errors.New("Missing Jmeter Test plan in jmx")
+	}
+	ht := jtp.SelectElement("hashTree")
+	if ht == nil {
+		return nil, errors.New("Missing hash tree inside Jmeter test plan in jmx")
+	}
+	ht = ht.SelectElement("hashTree")
+	if ht == nil {
+		return nil, errors.New("Missing hash tree inside hash tree in jmx")
+	}
+	tgs := ht.SelectElements("ThreadGroup")
+	stgs := ht.SelectElements("SetupThreadGroup")
+	tgs = append(tgs, stgs...)
+	return tgs, nil
+}
+
+func parseTestPlan(file []byte) (*etree.Document, error) {
+	doc := etree.NewDocument()
+	if err := doc.ReadFromBytes(file); err != nil {
+		return nil, err
+	}
+	return doc, nil
+}
+
+func modifyJMX(file []byte, threads, duration, rampTime string) ([]byte, error) {
+	planDoc, err := parseTestPlan(file)
+	if err != nil {
+		return nil, err
+	}
+	durationInt, err := strconv.Atoi(duration)
+	if err != nil {
+		return nil, err
+	}
+	// it includes threadgroups and setupthreadgroups
+	threadGroups, err := GetThreadGroups(planDoc)
+	if err != nil {
+		return nil, err
+	}
+	for _, tg := range threadGroups {
+		children := tg.ChildElements()
+		for _, child := range children {
+			attrName := child.SelectAttrValue("name", "")
+			switch attrName {
+			case "ThreadGroup.duration":
+				child.SetText(strconv.Itoa(durationInt * 60))
+			case "ThreadGroup.scheduler":
+				child.SetText("true")
+			case "ThreadGroup.num_threads":
+				child.SetText(threads)
+			case "ThreadGroup.ramp_time":
+				child.SetText(rampTime)
+			}
+		}
+	}
+	return planDoc.WriteToBytes()
+}
+
+func (pc *PlanController) prepareJMX(file []byte, threads, duration, rampTime string) ([]byte, error) {
+	modified, err := modifyJMX(file, threads, duration, rampTime)
+	if err != nil {
+		return []byte{}, err
+	}
+	return modified, nil
+}
+
 func (pc *PlanController) prepare(plan *model.Plan, edc *controllerModel.EngineDataConfig) []*controllerModel.EngineDataConfig {
+	storageClient := sos.Client.Storage
 	edc.Duration = strconv.Itoa(pc.ep.Duration)
 	edc.Concurrency = strconv.Itoa(pc.ep.Concurrency)
 	edc.Rampup = strconv.Itoa(pc.ep.Rampup)
 	engineDataConfigs := edc.DeepCopies(pc.ep.Engines)
+	TestPlanFile, err := storageClient.Download(plan.TestFile.Filepath)
+	if err != nil {
+		return engineDataConfigs
+	}
+	modifiedPlan, err := pc.prepareJMX(TestPlanFile, edc.Concurrency, edc.Duration, edc.Rampup)
+	if err != nil {
+		return engineDataConfigs
+	}
+	planData := make(map[string][]byte)
+	for _, d := range plan.Data {
+		file, err := storageClient.Download(d.Filepath)
+		if err != nil {
+			return engineDataConfigs
+		}
+		planData[d.Filename] = file
+	}
 	for i := 0; i < pc.ep.Engines; i++ {
 		// we split the data inherited from collection if the plan specifies split too
 		if pc.ep.CSVSplit {
@@ -51,6 +138,7 @@ func (pc *PlanController) prepare(plan *model.Plan, edc *controllerModel.EngineD
 			}
 		}
 		// Add test file to all engines
+		plan.TestFile.FileContent = modifiedPlan
 		engineDataConfigs[i].EngineData[plan.TestFile.Filename] = plan.TestFile
 		// add all data uploaded in plans. This will override common data if same filename already exists
 		for _, d := range plan.Data {
@@ -64,6 +152,12 @@ func (pc *PlanController) prepare(plan *model.Plan, edc *controllerModel.EngineD
 				sf.TotalSplits = pc.ep.Engines
 				sf.CurrentSplit = i
 			}
+			splittedFile, err := utils.SplitCSV(planData[d.Filename], sf.TotalSplits, sf.CurrentSplit)
+			if err != nil {
+				//TODO: handle the error here
+				continue
+			}
+			sf.FileContent = splittedFile
 			engineDataConfigs[i].EngineData[d.Filename] = &sf
 		}
 	}
@@ -75,6 +169,7 @@ func (pc *PlanController) trigger(engineDataConfig *controllerModel.EngineDataCo
 	if err != nil {
 		return err
 	}
+
 	engineDataConfigs := pc.prepare(plan, engineDataConfig)
 	engines, err := generateEnginesWithUrl(pc.ep.Engines, pc.ep.PlanID, pc.collection.ID, pc.collection.ProjectID,
 		JmeterEngineType, pc.scheduler)

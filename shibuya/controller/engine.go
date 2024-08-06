@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -78,9 +79,33 @@ type baseEngine struct {
 
 func sendTriggerRequest(url string, edc *controllerModel.EngineDataConfig) (*http.Response, error) {
 	body := new(bytes.Buffer)
-	json.NewEncoder(body).Encode(&edc)
-	req, _ := http.NewRequest("POST", url, body)
-	req.Header.Set("Content-Type", "application/json")
+	writer := multipart.NewWriter(body)
+	for _, f := range edc.EngineData {
+		formFile, err := writer.CreateFormFile(f.Filename, f.Filename)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := formFile.Write(f.FileContent); err != nil {
+			return nil, err
+		}
+	}
+	jsonPart, err := writer.CreateFormField("configs")
+	if err != nil {
+		return nil, err
+	}
+	jsonBytes, err := json.Marshal(edc)
+	if err != nil {
+		return nil, err
+	}
+	jsonPart.Write(jsonBytes)
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return engineHttpClient.Do(req)
 }
 
