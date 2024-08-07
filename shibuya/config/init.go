@@ -156,7 +156,7 @@ func loadContext() string {
 func (sc *ShibuyaConfig) makeHTTPClients() {
 	sc.HTTPClient = &http.Client{}
 	sc.HTTPProxyClient = sc.HTTPClient
-	if sc.HttpConfig.Proxy == "" {
+	if sc.HttpConfig == nil && sc.HttpConfig.Proxy == "" {
 		return
 	}
 	proxyUrl, err := url.Parse(sc.HttpConfig.Proxy)
@@ -186,8 +186,10 @@ func applyJsonLogging() {
 func setupLogging() {
 	log.SetOutput(os.Stdout)
 	log.SetReportCaller(true)
-	if SC.LogFormat.Json {
-		applyJsonLogging()
+	if SC.LogFormat != nil {
+		if SC.LogFormat.Json {
+			applyJsonLogging()
+		}
 	}
 }
 
