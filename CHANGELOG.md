@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-08-07)
+
+
+### Bug Fixes
+
+* add missing config map in the chart ([a78631b](https://github.com/iandyh/shibuya/commit/a78631b04aca84ee7febaf05fd16969651fb6ef3))
+* deal with nil config ([8e3ae7a](https://github.com/iandyh/shibuya/commit/8e3ae7a3241fa0e31b8109a9fffdda782dd939d3))
+
 ## 1.0.0 (2024-08-07)
 
 
