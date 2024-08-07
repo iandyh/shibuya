@@ -151,6 +151,25 @@ func (kcm *K8sClientManager) makeHostAliases() []apiv1.HostAlias {
 func (kcm *K8sClientManager) generatePlanDeployment(planName string, replicas int, labels map[string]string, containerConfig *config.ExecutorContainer,
 	affinity *apiv1.Affinity, tolerations []apiv1.Toleration) appsv1.StatefulSet {
 	t := true
+	volumes := []apiv1.Volume{}
+	volumeMounts := []apiv1.VolumeMount{}
+	if config.SC.ObjectStorage.Provider == "gcp" {
+		v := apiv1.Volume{
+			Name: "shibuya-gcp-auth",
+			VolumeSource: apiv1.VolumeSource{
+				Secret: &apiv1.SecretVolumeSource{
+					SecretName: "shibuya-auth-keys-gcp",
+				},
+			},
+		}
+		volumes = append(volumes, v)
+		vm := apiv1.VolumeMount{
+			Name:      "shibuya-gcp-auth",
+			MountPath: "/auth/shibuya-gcp.json",
+			SubPath:   "shibuya-gcp.json",
+		}
+		volumeMounts = append(volumeMounts, vm)
+	}
 	deployment := appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:                       planName,
@@ -179,6 +198,7 @@ func (kcm *K8sClientManager) generatePlanDeployment(planName string, replicas in
 					},
 					TerminationGracePeriodSeconds: new(int64),
 					HostAliases:                   kcm.makeHostAliases(),
+					Volumes:                       volumes,
 					Containers: []apiv1.Container{
 						{
 							Name:            planName,
@@ -201,6 +221,7 @@ func (kcm *K8sClientManager) generatePlanDeployment(planName string, replicas in
 									ContainerPort: 8080,
 								},
 							},
+							VolumeMounts: volumeMounts,
 						},
 					},
 				},
