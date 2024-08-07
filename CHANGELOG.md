@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/iandyh/shibuya/compare/v1.0.1...v1.0.2) (2024-08-07)
+
+
+### Bug Fixes
+
+* fix config around httpproxy ([bfeb726](https://github.com/iandyh/shibuya/commit/bfeb726f408341b4cefe05ec77cc72e3b02bb440))
+
 ## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-08-07)
 
 
