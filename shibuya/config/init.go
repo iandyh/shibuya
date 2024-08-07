@@ -209,8 +209,9 @@ func loadConfig() *ShibuyaConfig {
 	}
 	sc.Context = loadContext()
 	sc.DevMode = sc.Context == "local"
-	sc.makeHTTPClients()
-
+	if sc.HttpConfig != nil {
+		sc.makeHTTPClients()
+	}
 	// In jmeter agent, we also rely on this module, therefore we need to check whether this is nil or not. As jmeter
 	// configuration might provide an empty struct here
 	// TODO: we should not let jmeter code rely on this part
