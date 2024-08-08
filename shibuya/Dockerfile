@@ -1,6 +1,6 @@
 FROM ubuntu:18.04
 
-RUN apt-get update && apt-get install -y libssl-dev
+RUN apt-get update && apt-get install -y openssl
 ARG binary_name=shibuya
 ADD ./build/${binary_name} /usr/local/bin/${binary_name}
 
