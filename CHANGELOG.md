@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.4](https://github.com/iandyh/shibuya/compare/v1.0.3...v1.0.4) (2024-08-08)
+
+
+### Bug Fixes
+
+* install libssl-dev ([fa43c68](https://github.com/iandyh/shibuya/commit/fa43c68aa83306f2812e084b51079725ef107739))
+
 ## [1.0.3](https://github.com/iandyh/shibuya/compare/v1.0.2...v1.0.3) (2024-08-08)
 
 
