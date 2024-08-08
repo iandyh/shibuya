@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.5](https://github.com/iandyh/shibuya/compare/v1.0.4...v1.0.5) (2024-08-08)
+
+
+### Bug Fixes
+
+* install openssl ([3ed0237](https://github.com/iandyh/shibuya/commit/3ed02371bfb6c6adcd30e89ee706215443362cfb))
+
 ## [1.0.4](https://github.com/iandyh/shibuya/compare/v1.0.3...v1.0.4) (2024-08-08)
 
 
