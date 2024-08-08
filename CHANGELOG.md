@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/iandyh/shibuya/compare/v1.0.5...v1.0.6) (2024-08-08)
+
+
+### Bug Fixes
+
+* install ca ([b09b28f](https://github.com/iandyh/shibuya/commit/b09b28ff5adb68699e520959874b4314297bf5c3))
+
 ## [1.0.5](https://github.com/iandyh/shibuya/compare/v1.0.4...v1.0.5) (2024-08-08)
 
 
