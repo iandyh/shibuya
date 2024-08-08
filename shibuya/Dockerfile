@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 
 ARG binary_name=shibuya
 ADD ./build/${binary_name} /usr/local/bin/${binary_name}
