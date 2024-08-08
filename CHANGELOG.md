@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/iandyh/shibuya/compare/v1.0.0...v1.0.1) (2024-08-08)
+
+
+### Bug Fixes
+
+* update base ubuntu image ([2d88340](https://github.com/iandyh/shibuya/commit/2d88340488364acba4a4d8e9afbfa53b95cf1bde))
+
 ## 1.0.0 (2024-08-08)
 
 
