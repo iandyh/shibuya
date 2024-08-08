@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/iandyh/shibuya/compare/v1.0.2...v1.0.3) (2024-08-08)
+
+
+### Bug Fixes
+
+* debug ([f8add6d](https://github.com/iandyh/shibuya/commit/f8add6da5bc6253a723eada8029c716b550dd86e))
+
 ## [1.0.2](https://github.com/iandyh/shibuya/compare/v1.0.1...v1.0.2) (2024-08-08)
 
 
