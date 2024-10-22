@@ -14,6 +14,12 @@ var (
 		Help:       "Percentile latency of a collection",
 		Objectives: map[float64]float64{0.9: 0.01, 0.99: 0.001},
 	}, []string{"collection_id", "run_id"})
+	CollectionLatencyHistorgram = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "shibuya",
+		Name:      "latency_collection_seconds",
+		Help:      "Percentile histogram of a collection",
+		Buckets:   prometheus.DefBuckets,
+	}, []string{"collection_id", "run_id", "engine_no"})
 	PlanLatencySummary = promauto.NewSummaryVec(prometheus.SummaryOpts{
 		Namespace:  "shibuya",
 		Name:       "latency_plan",

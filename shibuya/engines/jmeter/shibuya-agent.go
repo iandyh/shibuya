@@ -158,6 +158,7 @@ func (sw *ShibuyaWrapper) makePromMetrics(line string) {
 
 	config.StatusCounter.WithLabelValues(sw.collectionID, planID, runID, engineID, label, status).Inc()
 	config.CollectionLatencySummary.WithLabelValues(collectionID, runID).Observe(latency)
+	config.CollectionLatencyHistorgram.WithLabelValues(collectionID, runID, engineID).Observe(latency / 1000)
 	config.PlanLatencySummary.WithLabelValues(collectionID, planID, runID).Observe(latency)
 	config.LabelLatencySummary.WithLabelValues(collectionID, label, runID).Observe(latency)
 	config.ThreadsGauge.WithLabelValues(collectionID, planID, runID, engineID).Set(threads)
