@@ -41,6 +41,9 @@ func GetAccountBySession(r *http.Request, authConfig *config.AuthConfig) *Accoun
 }
 
 func (a *Account) IsAdmin(authConfig *config.AuthConfig) bool {
+	if authConfig.NoAuth {
+		return true
+	}
 	for _, ml := range a.ML {
 		for _, admin := range authConfig.AdminUsers {
 			if ml == admin {
