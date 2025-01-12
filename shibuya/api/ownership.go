@@ -3,21 +3,22 @@ package api
 import (
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
+	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
-func (s *ShibuyaAPI) hasProjectOwnership(project *model.Project, account *model.Account) bool {
+func hasProjectOwnership(project *model.Project, account *model.Account, authConfig *config.AuthConfig) bool {
 	if _, ok := account.MLMap[project.Owner]; !ok {
-		if !account.IsAdmin(s.sc.AuthConfig) {
+		if !account.IsAdmin(authConfig) {
 			return false
 		}
 	}
 	return true
 }
 
-func (s *ShibuyaAPI) hasCollectionOwnership(r *http.Request, params httprouter.Params) (*model.Collection, error) {
-	collection, err := getCollection(params.ByName("collection_id"))
+func hasCollectionOwnership(r *http.Request, authConfig *config.AuthConfig) (*model.Collection, error) {
+	collectionID := r.PathValue("collection_id")
+	collection, err := getCollection(collectionID)
 	if err != nil {
 		return nil, err
 	}
@@ -26,7 +27,7 @@ func (s *ShibuyaAPI) hasCollectionOwnership(r *http.Request, params httprouter.P
 	if err != nil {
 		return nil, err
 	}
-	if r := s.hasProjectOwnership(project, account); !r {
+	if r := hasProjectOwnership(project, account, authConfig); !r {
 		return nil, makeCollectionOwnershipError()
 	}
 	return collection, nil

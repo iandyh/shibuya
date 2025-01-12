@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/rakutentech/shibuya/shibuya/api"
 	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -43,7 +42,7 @@ type HomeResp struct {
 	GCDuration            float64
 }
 
-func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request) {
 	account := model.GetAccountBySession(r, u.sc.AuthConfig)
 	if account == nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -64,7 +63,7 @@ func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request, params httprout
 		engineHealthDashboardURL, sc.ProjectHome, sc.UploadFileHelp, gcDuration})
 }
 
-func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	ss := auth.SessionStore
 	session, err := ss.Get(r, u.sc.AuthConfig.SessionKey)
@@ -87,7 +86,7 @@ func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request, params httprou
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (u *UI) logoutHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (u *UI) logoutHandler(w http.ResponseWriter, r *http.Request) {
 	session, err := auth.SessionStore.Get(r, u.sc.AuthConfig.SessionKey)
 	if err != nil {
 		log.Print(err)
@@ -102,7 +101,7 @@ type LoginResp struct {
 	ErrorMsg string
 }
 
-func (u *UI) loginPageHandler(w http.ResponseWriter, r *http.Request, params httprouter.Params) {
+func (u *UI) loginPageHandler(w http.ResponseWriter, r *http.Request) {
 	template := u.tmpl.Lookup("login.html")
 	qs := r.URL.Query()
 	errMsgs := qs["error_msg"]
@@ -116,9 +115,29 @@ func (u *UI) loginPageHandler(w http.ResponseWriter, r *http.Request, params htt
 
 func (u *UI) InitRoutes() api.Routes {
 	return api.Routes{
-		&api.Route{"home", "GET", "/", u.homeHandler},
-		&api.Route{"login", "POST", "/login", u.loginHandler},
-		&api.Route{"login", "GET", "/login", u.loginPageHandler},
-		&api.Route{"logout", "POST", "/logout", u.logoutHandler},
+		{
+			Name:        "home",
+			Method:      "GET",
+			Path:        "/{$}",
+			HandlerFunc: u.homeHandler,
+		},
+		{
+			Name:        "login",
+			Method:      "POST",
+			Path:        "/login",
+			HandlerFunc: u.loginHandler,
+		},
+		{
+			Name:        "login",
+			Method:      "GET",
+			Path:        "/login",
+			HandlerFunc: u.loginPageHandler,
+		},
+		{
+			Name:        "logout",
+			Method:      "POST",
+			Path:        "/logout",
+			HandlerFunc: u.logoutHandler,
+		},
 	}
 }

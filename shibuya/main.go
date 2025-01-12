@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/gorilla/context"
-	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rakutentech/shibuya/shibuya/api"
 	"github.com/rakutentech/shibuya/shibuya/auth"
@@ -27,23 +26,13 @@ func main() {
 	if err := model.CreateMySQLClient(sc.DBConf); err != nil {
 		log.Fatal(err)
 	}
-	api := api.NewAPIServer(sc)
-	routes := api.InitRoutes()
-	ui := ui.NewUI(sc)
-	uiRoutes := ui.InitRoutes()
+	routes := api.NewAPIServer(sc).InitRoutes()
+	uiRoutes := ui.NewUI(sc).InitRoutes()
 	routes = append(routes, uiRoutes...)
-	r := httprouter.New()
+	mux := http.NewServeMux()
 	for _, route := range routes {
-		r.Handle(route.Method, route.Path, route.HandlerFunc)
+		mux.HandleFunc(route.MakePttern(), route.HandlerFunc)
 	}
-	r.Handler("GET", "/metrics", promhttp.Handler())
-
-	fileServer := http.FileServer(http.Dir("/static"))
-	r.GET("/static/*filepath", func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
-		req.URL.Path = ps.ByName("filepath")
-		// Set the cache expiration time to 7 days
-		w.Header().Set("Cache-Control", "public, max-age=604800")
-		fileServer.ServeHTTP(w, req)
-	})
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8080), context.ClearHandler(r)))
+	mux.Handle("GET /metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8080), context.ClearHandler(mux)))
 }

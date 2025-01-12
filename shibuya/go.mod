@@ -12,7 +12,6 @@ require (
 	github.com/guregu/null v4.0.0+incompatible
 	github.com/hpcloud/tail v1.0.0
 	github.com/iandyh/eventsource v0.0.0-20180323060413-3ff7f3849c03
-	github.com/julienschmidt/httprouter v1.3.0
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/common v0.34.0
 	github.com/prometheus/prometheus v0.35.0
