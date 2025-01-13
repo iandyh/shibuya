@@ -5,6 +5,7 @@ go 1.23.4
 require (
 	cloud.google.com/go/storage v1.39.1
 	github.com/beevik/etree v1.1.0
+	github.com/go-chi/chi/v5 v5.2.0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/gorilla/context v1.1.1
 	github.com/gorilla/securecookie v1.1.1
