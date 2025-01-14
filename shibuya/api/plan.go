@@ -49,7 +49,7 @@ func (pa *PlanAPI) collectRoutes() Routes {
 		{
 			Name:        "Delete a plan",
 			Method:      "DELETE",
-			Path:        pa.Path,
+			Path:        fmt.Sprintf("%s/{plan_id}", pa.Path),
 			HandlerFunc: pa.planDeleteHandler,
 		},
 		{

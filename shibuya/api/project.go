@@ -52,7 +52,7 @@ func (pa *ProjectAPI) collectRoutes() Routes {
 		{
 			Name:        "Delete a project",
 			Method:      "DELETE",
-			Path:        pa.Path,
+			Path:        fmt.Sprintf("%s/{project_id}", pa.Path),
 			HandlerFunc: pa.projectDeleteHandler,
 		},
 	}
