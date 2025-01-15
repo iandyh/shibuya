@@ -2,6 +2,7 @@ package apitests
 
 import (
 	"fmt"
+	"strings"
 
 	"os"
 	"testing"
@@ -32,12 +33,13 @@ func newResourceManager(endpoint string) *resourceManager {
 }
 
 func (rm *resourceManager) prepareCollectionConfiguration(project *model.Project,
-	collection *model.Collection, plan *model.Plan) (*os.File, error) {
+	collection *model.Collection, plan *model.Plan, engineNo int) (*os.File, error) {
 	ew := &model.ExecutionWrapper{
 		Content: &model.ExecutionCollection{
 			Name:         collection.Name,
 			ProjectID:    project.ID,
 			CollectionID: collection.ID,
+			CSVSplit:     true,
 			Tests: []*model.ExecutionPlan{
 				{
 					Name:        plan.Name,
@@ -45,7 +47,8 @@ func (rm *resourceManager) prepareCollectionConfiguration(project *model.Project
 					Concurrency: 1,
 					Rampup:      0,
 					PlanID:      plan.ID,
-					Engines:     2,
+					Engines:     engineNo,
+					CSVSplit:    true,
 				},
 			},
 		},
@@ -103,7 +106,7 @@ func (rm *resourceManager) createCollection(projectID string) (*model.Collection
 }
 
 func (rm *resourceManager) prepareResources() (*model.Project, *model.Collection, *model.Plan, error) {
-	project, err := rm.createProject()
+	project, err := rm.projectClient.Create("test1", "shibuya")
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -124,33 +127,40 @@ func TestFullAPI(t *testing.T) {
 	rm := newResourceManager(endpoint)
 	project, collection, plan, err := rm.prepareResources()
 	defer func() {
-		if collection != nil {
-			if err := rm.collectionClient.Delete(collection.ID); err != nil {
-				t.Fatal(err)
-			}
-			log.Infof("Removed collection %d", collection.ID)
+		if err := rm.collectionClient.Delete(collection.ID); err != nil {
+			t.Fatal(err)
 		}
-		if plan != nil {
-			if err := rm.planClient.Delete(plan.ID); err != nil {
-				t.Fatal(err)
-			}
-			log.Infof("Removed plan %d", plan.ID)
+		log.Infof("Removed collection %d", collection.ID)
+
+		if err := rm.planClient.Delete(plan.ID); err != nil {
+			t.Fatal(err)
 		}
-		if project != nil {
-			if err := rm.projectClient.Delete(project.ID); err != nil {
-				t.Fatal(err)
-			}
-			log.Infof("Removed project %d", project.ID)
+		log.Infof("Removed plan %d", plan.ID)
+
+		if err := rm.projectClient.Delete(project.ID); err != nil {
+			t.Fatal(err)
 		}
+		log.Infof("Removed project %d", project.ID)
 	}()
 	cc := rm.collectionClient
-	collectionConfigurationFile, err := rm.prepareCollectionConfiguration(project, collection, plan)
+	testcases := []string{"testcasea", "testcaseb"}
+	// The number of engines should be equal to the number of test cases above
+	// Because in the following test, we are going to test csv_split case and we want to check
+	// the data has been evently dispatched to all engines. With 2 engines, we expect each engine
+	// gets 1 test case
+	collectionConfigurationFile, err := rm.prepareCollectionConfiguration(project, collection, plan,
+		len(testcases))
 	assert.Nil(t, err)
 	defer os.Remove(collectionConfigurationFile.Name())
+
 	content, err := os.Open(collectionConfigurationFile.Name())
 	err = cc.Configure(collection.ID, content)
 	assert.NoError(t, err)
 
+	dataFile, err := os.Open("testcases.csv")
+	assert.Nil(t, err)
+	err = cc.UploadFile(collection.ID, dataFile)
+	assert.Nil(t, err)
 	err = cc.Launch(collection.ID)
 	// Replace sleep to collection status api call
 	time.Sleep(20 * time.Second)
@@ -159,10 +169,22 @@ func TestFullAPI(t *testing.T) {
 	assert.NoError(t, err)
 	stream, cancel, err := cc.Subscribe(collection.ID)
 	assert.Nil(t, err)
+	notSeen := make(map[string]struct{})
+	for _, testcase := range testcases {
+		notSeen[testcase] = struct{}{}
+	}
 	for e := range stream.Events {
 		assert.NotEmpty(t, e.Data())
-		cancel()
-		break
+		for _, testcase := range testcases {
+			if strings.Contains(e.Data(), testcase) {
+				delete(notSeen, testcase)
+				break
+			}
+		}
+		if len(notSeen) == 0 {
+			cancel()
+			break
+		}
 	}
 	cc.Purge(collection.ID)
 	time.Sleep(5 * time.Second)
@@ -174,7 +196,7 @@ func TestObjectCRUD(t *testing.T) {
 	project, collection, plan, err := rm.prepareResources()
 	defer func() {
 		rm.collectionClient.Delete(collection.ID)
-		log.Infof("Deleted collection %d", collection.ID)
+		rm.planClient.Delete(plan.ID)
 		rm.projectClient.Delete(project.ID)
 	}()
 	assert.NoError(t, err)
@@ -196,10 +218,8 @@ func TestObjectCRUDWithErrors(t *testing.T) {
 	invalidID := int64(100000000)
 	_, err := rm.projectClient.Get(invalidID)
 	assert.Error(t, err)
-
 	_, err = rm.collectionClient.Get(invalidID)
 	assert.Error(t, err)
-
 	_, err = rm.planClient.Get(invalidID)
 	assert.Error(t, err)
 }

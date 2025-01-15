@@ -48,6 +48,38 @@ func (cc CollectionClient) Configure(collectionID int64, confFile *os.File) erro
 	return handleResponse(resp, nil)
 }
 
+func (cc CollectionClient) UploadFile(collectionID int64, dataFile *os.File) error {
+	subResource := fmt.Sprintf("%d/files", collectionID)
+	resourceUrl := cc.ResourceUrl(cc.Endpoint, subResource)
+	req, err := makeFileUploadRequest(resourceUrl, "PUT", "collectionFile", dataFile)
+	if err != nil {
+		return err
+	}
+	resp, err := cc.Client.Do(req)
+	if err != nil {
+		return err
+	}
+	return handleResponse(resp, nil)
+}
+
+func (cc CollectionClient) Subscribe(collectionID int64) (*es.Stream, context.CancelFunc, error) {
+	subResource := fmt.Sprintf("%d/stream", collectionID)
+	resourceUrl := cc.ResourceUrl(cc.Endpoint, subResource)
+	req, err := http.NewRequest("GET", resourceUrl, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	ctx, cancel := context.WithCancel(req.Context())
+	req = req.WithContext(ctx)
+	httpClient := &http.Client{}
+	stream, err := es.SubscribeWith("", httpClient, req)
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	return stream, cancel, nil
+}
+
 func (cc CollectionClient) sendCollectionVerbReq(collectionID int64, verb string) error {
 	subResource := fmt.Sprintf("%d/%s", collectionID, verb)
 	resourceUrl := cc.ResourceUrl(cc.Endpoint, subResource)
@@ -61,6 +93,16 @@ func (cc CollectionClient) sendCollectionVerbReq(collectionID int64, verb string
 	}
 	defer resp.Body.Close()
 	return handleResponse(resp, nil)
+}
+
+func (cc CollectionClient) Delete(collectionID int64) error {
+	resourceUrl := cc.ResourceUrl(cc.Endpoint, strconv.Itoa(int(collectionID)))
+	return sendDeleteRequest(cc.Client, resourceUrl)
+}
+
+func (cc CollectionClient) Get(collectionID int64) (*model.Collection, error) {
+	resourceUrl := cc.ResourceUrl(cc.Endpoint, strconv.Itoa(int(collectionID)))
+	return sendGetRequest(cc.Client, resourceUrl, &model.Collection{})
 }
 
 func (cc CollectionClient) Launch(collectionID int64) error {
@@ -82,32 +124,4 @@ func (cc CollectionClient) Purge(collectionID int64) error {
 
 func (cc CollectionClient) Status(collectionID string) error {
 	return nil
-}
-
-func (cc CollectionClient) Subscribe(collectionID int64) (*es.Stream, context.CancelFunc, error) {
-	subResource := fmt.Sprintf("%d/stream", collectionID)
-	resourceUrl := cc.ResourceUrl(cc.Endpoint, subResource)
-	req, err := http.NewRequest("GET", resourceUrl, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-	ctx, cancel := context.WithCancel(req.Context())
-	req = req.WithContext(ctx)
-	httpClient := &http.Client{}
-	stream, err := es.SubscribeWith("", httpClient, req)
-	if err != nil {
-		cancel()
-		return nil, nil, err
-	}
-	return stream, cancel, nil
-}
-
-func (cc CollectionClient) Delete(collectionID int64) error {
-	resourceUrl := cc.ResourceUrl(cc.Endpoint, strconv.Itoa(int(collectionID)))
-	return sendDeleteRequest(cc.Client, resourceUrl)
-}
-
-func (cc CollectionClient) Get(collectionID int64) (*model.Collection, error) {
-	resourceUrl := cc.ResourceUrl(cc.Endpoint, strconv.Itoa(int(collectionID)))
-	return sendGetRequest(cc.Client, resourceUrl, &model.Collection{})
 }
