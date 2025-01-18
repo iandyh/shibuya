@@ -122,6 +122,9 @@ func (rm *resourceManager) prepareResources() (*model.Project, *model.Collection
 	return project, collection, plan, nil
 }
 
+// In this test, we create a project, collection and a plan first
+// Then we configure two engines for a plan and share some common data among them
+// Trigger the test and we check whether the data is being equally shared in the 2 engines(each should have 1)
 func TestFullAPI(t *testing.T) {
 	endpoint := "http://localhost:8080"
 	rm := newResourceManager(endpoint)
