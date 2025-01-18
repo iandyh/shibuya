@@ -11,8 +11,8 @@ type ProjectClient struct {
 	*ClientOpts
 }
 
-func NewProjectClient(clientOpts *ClientOpts) ProjectClient {
-	return ProjectClient{
+func NewProjectClient(clientOpts *ClientOpts) *ProjectClient {
+	return &ProjectClient{
 		Meta: Meta{
 			Kind: "projects",
 		},
@@ -20,7 +20,7 @@ func NewProjectClient(clientOpts *ClientOpts) ProjectClient {
 	}
 }
 
-func (pc ProjectClient) Create(name, owner string) (*model.Project, error) {
+func (pc *ProjectClient) Create(name, owner string) (*model.Project, error) {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, "")
 	params := map[string]string{
 		"name":  name,
@@ -30,12 +30,12 @@ func (pc ProjectClient) Create(name, owner string) (*model.Project, error) {
 	return sendCreateRequest(pc.Client, resourceUrl, params, &model.Project{})
 }
 
-func (pc ProjectClient) Get(ID int64) (*model.Project, error) {
+func (pc *ProjectClient) Get(ID int64) (*model.Project, error) {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, strconv.Itoa(int(ID)))
 	return sendGetRequest(pc.Client, resourceUrl, &model.Project{})
 }
 
-func (pc ProjectClient) Delete(ID int64) error {
+func (pc *ProjectClient) Delete(ID int64) error {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, strconv.Itoa(int(ID)))
 	return sendDeleteRequest(pc.Client, resourceUrl)
 }

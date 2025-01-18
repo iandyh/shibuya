@@ -17,9 +17,9 @@ import (
 
 type resourceManager struct {
 	endpoint         string
-	projectClient    client.ProjectClient
-	collectionClient client.CollectionClient
-	planClient       client.PlanClient
+	projectClient    *client.ProjectClient
+	collectionClient *client.CollectionClient
+	planClient       *client.PlanClient
 }
 
 func newResourceManager(endpoint string) *resourceManager {

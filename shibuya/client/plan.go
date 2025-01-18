@@ -12,8 +12,8 @@ type PlanClient struct {
 	*ClientOpts
 }
 
-func NewPlanClient(clientOpts *ClientOpts) PlanClient {
-	return PlanClient{
+func NewPlanClient(clientOpts *ClientOpts) *PlanClient {
+	return &PlanClient{
 		Meta: Meta{
 			Kind: "plans",
 		},
@@ -21,7 +21,7 @@ func NewPlanClient(clientOpts *ClientOpts) PlanClient {
 	}
 }
 
-func (pc PlanClient) Create(projectID, name string) (*model.Plan, error) {
+func (pc *PlanClient) Create(projectID, name string) (*model.Plan, error) {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, "")
 	params := map[string]string{
 		"project_id": projectID,
@@ -32,7 +32,7 @@ func (pc PlanClient) Create(projectID, name string) (*model.Plan, error) {
 
 // TODO: currently, if the file already exists, we should return 400
 // Instead, it's returning 500 now. We should fix it.
-func (pc PlanClient) UploadFile(planID int64, file *os.File) error {
+func (pc *PlanClient) UploadFile(planID int64, file *os.File) error {
 	subResource := fmt.Sprintf("%d/files", planID)
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, subResource)
 	req, err := makeFileUploadRequest(resourceUrl, "PUT", "planFile", file)
@@ -46,12 +46,12 @@ func (pc PlanClient) UploadFile(planID int64, file *os.File) error {
 	return handleResponse(resp, nil)
 }
 
-func (pc PlanClient) Delete(planID int64) error {
+func (pc *PlanClient) Delete(planID int64) error {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, fmt.Sprintf("%d", planID))
 	return sendDeleteRequest(pc.Client, resourceUrl)
 }
 
-func (pc PlanClient) Get(planID int64) (*model.Plan, error) {
+func (pc *PlanClient) Get(planID int64) (*model.Plan, error) {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, fmt.Sprintf("%d", planID))
 	return sendGetRequest(pc.Client, resourceUrl, &model.Plan{})
 }
