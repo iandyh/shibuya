@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rakutentech/shibuya/shibuya/model"
+	"github.com/rakutentech/shibuya/shibuya/api"
 )
 
 func makeFormValues(params map[string]string) url.Values {
@@ -51,7 +51,7 @@ func makeFileUploadRequest(resourceUrl, method string, formName string, file *os
 	return req, nil
 }
 
-func sendCreateRequest[T model.ShibuyaObject](client *http.Client, resourceUrl string, params map[string]string, obj T) (T, error) {
+func sendCreateRequest[T api.ShibuyaObject](client *http.Client, resourceUrl string, params map[string]string, obj T) (T, error) {
 	req, err := makeFormRequest(resourceUrl, params)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func sendDeleteRequest(client *http.Client, resourceUrl string) error {
 	return nil
 }
 
-func sendGetRequest[T model.ShibuyaObject](client *http.Client, resourceUrl string, obj T) (T, error) {
+func sendGetRequest[T api.ShibuyaObject](client *http.Client, resourceUrl string, obj T) (T, error) {
 	req, err := http.NewRequest("GET", resourceUrl, nil)
 	if err != nil {
 		return nil, err
