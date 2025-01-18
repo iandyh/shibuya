@@ -162,9 +162,28 @@ func TestFullAPI(t *testing.T) {
 	err = cc.UploadFile(collection.ID, dataFile)
 	assert.Nil(t, err)
 	err = cc.Launch(collection.ID)
-	// Replace sleep to collection status api call
-	time.Sleep(20 * time.Second)
-
+	triggerable := false
+	timeout := time.Duration(20 * time.Second)
+waitLoop:
+	for {
+		select {
+		case <-time.After(timeout):
+			break waitLoop
+		default:
+			time.Sleep(1 * time.Second)
+			cs, err := cc.Status(collection.ID)
+			if err != nil {
+				continue waitLoop
+			}
+			if cs.CanBeTriggered() {
+				triggerable = true
+				break waitLoop
+			}
+		}
+	}
+	if !triggerable {
+		t.Fatalf("Engines could not be ready after %v", timeout)
+	}
 	err = cc.Trigger(collection.ID)
 	assert.NoError(t, err)
 	stream, cancel, err := cc.Subscribe(collection.ID)

@@ -21,6 +21,18 @@ type CollectionStatus struct {
 	PoolStatus string        `json:"pool_status"`
 }
 
+func (cs *CollectionStatus) CanBeTriggered() bool {
+	for _, p := range cs.Plans {
+		if !p.EnginesReachable {
+			return false
+		}
+		if p.EnginesDeployed != p.Engines {
+			return false
+		}
+	}
+	return true
+}
+
 type EngineOwnerRef struct {
 	EnginesCount int
 	ProjectID    int64

@@ -9,6 +9,7 @@ import (
 
 	es "github.com/iandyh/eventsource"
 	"github.com/rakutentech/shibuya/shibuya/model"
+	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 )
 
 type CollectionClient struct {
@@ -122,6 +123,9 @@ func (cc CollectionClient) Purge(collectionID int64) error {
 	return cc.sendCollectionVerbReq(collectionID, "purge")
 }
 
-func (cc CollectionClient) Status(collectionID string) error {
-	return nil
+func (cc CollectionClient) Status(collectionID int64) (*smodel.CollectionStatus, error) {
+	subResource := fmt.Sprintf("%d/status", collectionID)
+	resourceUrl := cc.ResourceUrl(cc.Endpoint, subResource)
+	return sendGetRequest(cc.Client, resourceUrl, &smodel.CollectionStatus{})
+
 }
