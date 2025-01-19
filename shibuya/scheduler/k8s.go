@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -21,7 +20,6 @@ import (
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
-	v1networking "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -396,38 +394,6 @@ func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
 	} else {
 		return podList.Items[0].Status.HostIP, nil
 	}
-}
-
-func (kcm *K8sClientManager) CreateService(serviceName string, engine appsv1.Deployment) error {
-	err := kcm.expose(serviceName, &engine)
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	return nil
-}
-
-func (kcm *K8sClientManager) DeployEngine(projectID, collectionID, planID int64,
-	engineID int, containerConfig *config.ExecutorContainer) error {
-	engineName := makeEngineName(projectID, collectionID, planID, engineID)
-	labels := makeEngineLabel(projectID, collectionID, planID, engineName)
-	affinity := prepareAffinity(collectionID, kcm.sc.ExecutorConfig.NodeAffinity)
-	tolerations := prepareTolerations(kcm.sc.ExecutorConfig.Tolerations)
-	engineConfig := kcm.generateEngineDeployment(engineName, labels, containerConfig, affinity, tolerations)
-	if err := kcm.deploy(&engineConfig); err != nil && !errors.IsAlreadyExists(err) {
-		return err
-	}
-	engineSvcName := makeEngineName(projectID, collectionID, planID, engineID)
-	if err := kcm.CreateService(engineSvcName, engineConfig); err != nil {
-		return err
-	}
-	ingressClass := makeIngressClass(projectID)
-	ingressName := makeIngressName(projectID, collectionID, planID, engineID)
-	if err := kcm.CreateIngress(ingressClass, ingressName, engineSvcName, collectionID, projectID); err != nil {
-		return err
-	}
-	log.Printf("Finish creating one engine for %s", engineName)
-	return nil
 }
 
 func (kcm *K8sClientManager) makePlanService(name string, label map[string]string) *apiv1.Service {
@@ -995,49 +961,6 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
 	return nil
 }
 
-func (kcm *K8sClientManager) CreateIngress(ingressClass, ingressName, serviceName string, collectionID, projectID int64) error {
-	ingressRule := v1networking.IngressRule{}
-	pathType := v1networking.PathType("Exact")
-	ingressRule.HTTP = &v1networking.HTTPIngressRuleValue{
-		Paths: []v1networking.HTTPIngressPath{
-			{
-				Path:     fmt.Sprintf("/%s/(.*)", serviceName),
-				PathType: &pathType,
-				Backend: v1networking.IngressBackend{
-					Service: &v1networking.IngressServiceBackend{
-						Name: serviceName,
-						Port: v1networking.ServiceBackendPort{
-							Number: 80,
-						},
-					},
-				},
-			},
-		},
-	}
-	ingress := v1networking.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ingressName,
-			Annotations: map[string]string{
-				"kubernetes.io/ingress.class":                    ingressClass,
-				"nginx.ingress.kubernetes.io/rewrite-target":     "/$1",
-				"nginx.ingress.kubernetes.io/ssl-redirect":       "false",
-				"nginx.ingress.kubernetes.io/proxy-body-size":    "100m",
-				"nginx.ingress.kubernetes.io/proxy-send-timeout": "600",
-				"nginx.ingress.kubernetes.io/proxy-read-timeout": "600",
-			},
-			Labels: makeIngressLabel(projectID, collectionID),
-		},
-		Spec: v1networking.IngressSpec{
-			Rules: []v1networking.IngressRule{ingressRule},
-		},
-	}
-	_, err := kcm.client.NetworkingV1().Ingresses(kcm.Namespace).Create(context.TODO(), &ingress, metav1.CreateOptions{})
-	if err != nil {
-		log.Error(err)
-	}
-	return nil
-}
-
 func (kcm *K8sClientManager) GetDeployedCollections() (map[int64]time.Time, error) {
 	labelSelector := fmt.Sprintf("kind=executor")
 	pods, err := kcm.GetPods(labelSelector, "")
@@ -1102,8 +1025,4 @@ func (kcm *K8sClientManager) GetCollectionEnginesDetail(projectID, collectionID 
 	collectionDetails.Engines = engines
 	collectionDetails.ControllerReplicas = kcm.sc.IngressConfig.Replicas
 	return collectionDetails, nil
-}
-
-func getEngineNumber(podName string) string {
-	return strings.Split(podName, "-")[4]
 }

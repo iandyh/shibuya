@@ -12,7 +12,6 @@ import (
 )
 
 type EngineScheduler interface {
-	DeployEngine(projectID, collectionID, planID int64, engineID int, containerConfig *config.ExecutorContainer) error
 	DeployPlan(projectID, collectionID, planID int64, replicas int, containerConfig *config.ExecutorContainer) error
 	CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error)
 	CreateCollectionScraper(collectionID int64) error
