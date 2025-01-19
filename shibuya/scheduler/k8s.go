@@ -42,7 +42,7 @@ func NewK8sClientManager(cfg config.ShibuyaConfig) *K8sClientManager {
 		log.Warning(err)
 	}
 	return &K8sClientManager{
-		cfg, c, "shibuya-ingress-serviceaccount-1", cfg.ExecutorConfig.Namespace,
+		cfg, c, "shibuya-coordinator", cfg.ExecutorConfig.Namespace,
 	}
 
 }

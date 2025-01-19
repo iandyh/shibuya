@@ -82,7 +82,7 @@ permissions:
 	kubectl -n $(shibuya-controller-ns) apply -f kubernetes/serviceaccount.yaml
 	kubectl -n $(shibuya-controller-ns) apply -f kubernetes/service-account-secret.yaml
 	-kubectl -n $(shibuya-executor-ns) create rolebinding shibuya --role=shibuya --serviceaccount $(shibuya-controller-ns):shibuya
-	kubectl -n $(shibuya-executor-ns) replace -f kubernetes/ingress.yaml --force
+	kubectl -n $(shibuya-executor-ns) replace -f kubernetes/coordinator.yaml --force
 
 .PHONY: permissions-gcp
 permissions-gcp: node-permissions permissions
