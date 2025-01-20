@@ -92,7 +92,7 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 			// We wait for all the engines. Because we can only all the plan into running status
 			// When all the engines are triggered
 
-			pc := NewPlanController(ep, collection, c.Scheduler, c.sc)
+			pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
 			if err := pc.trigger(engineDataConfigs[i], runID); err != nil {
 				errs <- err
 				return
@@ -132,7 +132,7 @@ func (c *Controller) SubscribeCollection(collection *model.Collection) ([]shibuy
 		wg.Add(1)
 		go func(ep *model.ExecutionPlan) {
 			defer wg.Done()
-			pc := NewPlanController(ep, collection, c.Scheduler, c.sc)
+			pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
 			engines, err := pc.subscribe()
 			if err != nil {
 				return
@@ -158,7 +158,7 @@ func (c *Controller) TermCollection(collection *model.Collection, force bool) (e
 		wg.Add(1)
 		go func(ep *model.ExecutionPlan) {
 			defer wg.Done()
-			pc := NewPlanController(ep, collection, c.Scheduler, c.sc) // we don't need scheduler here
+			pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc) // we don't need scheduler here
 			if err := pc.term(force); err != nil {
 				log.Error(err)
 				e = err

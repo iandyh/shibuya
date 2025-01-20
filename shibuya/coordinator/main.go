@@ -264,7 +264,9 @@ func main() {
 		Rewrite:   sic.rewriteURL,
 		Transport: tr,
 	}
-	if err := http.ListenAndServe(cc.listenAddr, &rp); err != nil {
+	certFile := "/tls/tls.crt"
+	keyFile := "/tls/tls.key"
+	if err := http.ListenAndServeTLS(cc.listenAddr, certFile, keyFile, &rp); err != nil {
 		log.Fatal(err)
 	}
 }

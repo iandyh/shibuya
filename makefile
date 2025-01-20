@@ -49,6 +49,7 @@ local_controller:
 .PHONY: shibuya
 shibuya: local_api local_controller grafana
 	helm uninstall shibuya || true
+	cd shibuya && sh gen_coordinator_ca.sh $(shibuya-controller-ns)
 	cd shibuya && helm upgrade --install shibuya install/shibuya
 
 .PHONY: jmeter

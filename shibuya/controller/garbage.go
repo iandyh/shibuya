@@ -15,7 +15,7 @@ func (c *Controller) CheckRunningThenTerminate() {
 		go func(jobs <-chan *RunningPlan) {
 		jobLoop:
 			for j := range jobs {
-				pc := NewPlanController(j.ep, j.collection, c.Scheduler, c.sc)
+				pc := NewPlanController(j.ep, j.collection, c.Scheduler, c.httpClient, c.sc)
 				if running := pc.progress(); !running {
 					collection := j.collection
 					currRunID, err := collection.GetCurrentRun()

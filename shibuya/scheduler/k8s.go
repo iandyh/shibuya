@@ -2,6 +2,8 @@ package scheduler
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	e "errors"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rakutentech/shibuya/shibuya/certmanager"
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/engines/metrics"
 	model "github.com/rakutentech/shibuya/shibuya/model"
@@ -32,6 +35,8 @@ type K8sClientManager struct {
 	client         *kubernetes.Clientset
 	serviceAccount string
 	Namespace      string
+	httpClient     *http.Client
+	CAPair         *config.CAPair
 }
 
 func NewK8sClientManager(cfg config.ShibuyaConfig) *K8sClientManager {
@@ -39,10 +44,19 @@ func NewK8sClientManager(cfg config.ShibuyaConfig) *K8sClientManager {
 	if err != nil {
 		log.Warning(err)
 	}
-	return &K8sClientManager{
-		cfg, c, "shibuya-coordinator", cfg.ExecutorConfig.Namespace,
+	pool := x509.NewCertPool()
+	pool.AddCert(cfg.CAPair.Cert)
+	httpClient := &http.Client{
+		Timeout: 3 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: pool,
+			},
+		},
 	}
-
+	return &K8sClientManager{
+		cfg, c, "shibuya-coordinator", cfg.ExecutorConfig.Namespace, httpClient, cfg.CAPair,
+	}
 }
 
 func makeNodeAffinity(key, value string) *apiv1.NodeAffinity {
@@ -340,41 +354,34 @@ func (kcm *K8sClientManager) deploy(deployment *appsv1.Deployment) error {
 	return nil
 }
 
-func (kcm *K8sClientManager) expose(name string, deployment *appsv1.Deployment) error {
+func (kcm *K8sClientManager) expose(name string, labels map[string]string) error {
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 			Annotations: map[string]string{
 				"networking.istio.io/exportTo": ".",
 			},
-			Labels: deployment.Spec.Template.ObjectMeta.Labels,
+			Labels: labels,
 		},
 		Spec: apiv1.ServiceSpec{
-			Selector: deployment.Spec.Template.ObjectMeta.Labels,
+			Selector: labels,
 			Ports: []apiv1.ServicePort{
 				{
-					Port:       80,
+					Port:       443,
 					TargetPort: intstr.FromString("http"),
 				},
 			},
 		},
 	}
-	if deployment.Labels["kind"] == "ingress-controller" {
-		switch kcm.sc.ExecutorConfig.Cluster.ServiceType {
-		case "NodePort":
-			service.Spec.Type = apiv1.ServiceTypeNodePort
-		case "LoadBalancer":
-			service.Spec.ExternalTrafficPolicy = "Local"
-			service.Spec.Type = apiv1.ServiceTypeLoadBalancer
-		}
+	switch kcm.sc.ExecutorConfig.Cluster.ServiceType {
+	case "NodePort":
+		service.Spec.Type = apiv1.ServiceTypeNodePort
+	case "LoadBalancer":
+		service.Spec.ExternalTrafficPolicy = "Local"
+		service.Spec.Type = apiv1.ServiceTypeLoadBalancer
 	}
 	_, err := kcm.client.CoreV1().Services(kcm.Namespace).Create(context.TODO(), service, metav1.CreateOptions{})
-	if errors.IsAlreadyExists(err) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	return nil
+	return err
 }
 
 func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
@@ -655,9 +662,8 @@ func (kcm *K8sClientManager) PodReadyCount(collectionID int64) int {
 }
 
 func (kcm *K8sClientManager) ServiceReachable(engineUrl string) bool {
-	resp, err := http.Get(fmt.Sprintf("http://%s/start", engineUrl))
+	resp, err := kcm.httpClient.Get(fmt.Sprintf("https://%s/start", engineUrl))
 	if err != nil {
-		log.Warn(err)
 		return false
 	}
 	defer resp.Body.Close()
@@ -730,17 +736,21 @@ func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
 	igName := makeIngressClass(projectID)
 	deleteOpts := metav1.DeleteOptions{}
 	if err := kcm.client.AppsV1().Deployments(kcm.Namespace).Delete(context.TODO(), igName, deleteOpts); err != nil {
-		return err
+		log.Error(err)
 	}
 	if err := kcm.client.CoreV1().Services(kcm.Namespace).Delete(context.TODO(), igName, deleteOpts); err != nil {
-		return err
+		log.Error(err)
+	}
+	if err := kcm.client.CoreV1().Secrets(kcm.Namespace).Delete(context.TODO(), igName, deleteOpts); err != nil {
+		log.Error(err)
 	}
 	return nil
 }
 
 func int32Ptr(i int32) *int32 { return &i }
 
-func (kcm *K8sClientManager) generateControllerDeployment(igName string, projectID int64) appsv1.Deployment {
+func (kcm *K8sClientManager) generateControllerDeployment(igName string, projectID int64,
+	volumes []apiv1.Volume, volumeMounts []apiv1.VolumeMount) appsv1.Deployment {
 	tolerations := prepareTolerations(kcm.sc.ExecutorConfig.Tolerations)
 	t := true
 	labels := makeIngressControllerLabel(projectID)
@@ -767,6 +777,7 @@ func (kcm *K8sClientManager) generateControllerDeployment(igName string, project
 					ServiceAccountName:            kcm.serviceAccount,
 					TerminationGracePeriodSeconds: new(int64),
 					AutomountServiceAccountToken:  &t,
+					Volumes:                       volumes,
 					Containers: []apiv1.Container{
 						{
 							Name:  "shibuya-ingress-controller",
@@ -824,6 +835,7 @@ func (kcm *K8sClientManager) generateControllerDeployment(igName string, project
 									Value: fmt.Sprintf("%d", projectID),
 								},
 							},
+							VolumeMounts: volumeMounts,
 						},
 					},
 				},
@@ -949,15 +961,63 @@ func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
 
 func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
 	igName := makeIngressClass(projectID)
-	deployment := kcm.generateControllerDeployment(igName, projectID)
-	// there could be duplicated controller deployment from multiple collections
-	// This method has already taken it into considertion.
-	if err := kcm.deploy(&deployment); err != nil {
+	labels := makeIngressControllerLabel(projectID)
+	// We firstly need to expose the project because we need to the external
+	// IP for the certs
+	if err := kcm.expose(igName, labels); err != nil {
+		if errors.IsAlreadyExists(err) {
+			return nil
+		}
 		return err
 	}
-	if err := kcm.expose(igName, &deployment); err != nil {
-		return err
-	}
+	go func() {
+		waitDuration := time.Duration(10 * time.Minute)
+		ticker := time.NewTicker(3 * time.Second)
+		externalIP := ""
+		var err error
+	waitLoop:
+		for {
+			select {
+			case <-time.After(waitDuration):
+				break waitLoop
+			case <-ticker.C:
+				externalIP, err = kcm.GetIngressUrl(projectID)
+				if err != nil {
+					continue waitLoop
+				}
+				if externalIP == "" {
+					continue waitLoop
+				}
+				break waitLoop
+			}
+		}
+		log.Infof("wait loop is out and the external IP is %s", externalIP)
+		if externalIP != "" {
+			cert, key, err := certmanager.GenCertAndKey(kcm.CAPair, projectID, externalIP)
+			if err != nil {
+				log.Error(err)
+				return
+			}
+			secret := makeCertKeySecret(projectID, cert, key)
+			if _, err := kcm.client.CoreV1().Secrets(kcm.Namespace).Create(context.TODO(),
+				secret, metav1.CreateOptions{}); err != nil {
+				log.Error(err)
+				return
+			}
+			volumeName := "tls"
+			volumes := []apiv1.Volume{
+				makeSecretVolume(volumeName, makeIngressClass(projectID))}
+			volumeMounts := []apiv1.VolumeMount{
+				makeVolumeMount(volumeName, "/tls", true)}
+			deployment := kcm.generateControllerDeployment(makeIngressClass(projectID), projectID,
+				volumes, volumeMounts)
+			// there could be duplicated controller deployment from multiple collections
+			// This method has already taken it into considertion.
+			if err := kcm.deploy(&deployment); err != nil {
+				log.Error(err)
+			}
+		}
+	}()
 	return nil
 }
 

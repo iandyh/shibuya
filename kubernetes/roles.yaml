@@ -16,6 +16,13 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - delete
+- apiGroups:
   - apps
   - ""
   - rbac.authorization.k8s.io
