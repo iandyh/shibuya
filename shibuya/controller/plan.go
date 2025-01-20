@@ -3,6 +3,7 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"sync"
 
@@ -19,14 +20,16 @@ type PlanController struct {
 	collection *model.Collection
 	scheduler  scheduler.EngineScheduler
 	sc         config.ShibuyaConfig
+	httpClient *http.Client
 }
 
-func NewPlanController(ep *model.ExecutionPlan, collection *model.Collection, scheduler scheduler.EngineScheduler, sc config.ShibuyaConfig) *PlanController {
+func NewPlanController(ep *model.ExecutionPlan, collection *model.Collection, scheduler scheduler.EngineScheduler, httpClient *http.Client, sc config.ShibuyaConfig) *PlanController {
 	return &PlanController{
 		ep:         ep,
 		collection: collection,
 		scheduler:  scheduler,
 		sc:         sc,
+		httpClient: httpClient,
 	}
 }
 
@@ -81,7 +84,7 @@ func (pc *PlanController) trigger(engineDataConfig *enginesModel.EngineDataConfi
 	}
 	engineDataConfigs := pc.prepare(plan, engineDataConfig, runID)
 	engines, err := generateEnginesWithUrl(pc.ep.Engines, pc.ep.PlanID, pc.collection.ID, pc.collection.ProjectID,
-		JmeterEngineType, pc.scheduler)
+		JmeterEngineType, pc.scheduler, pc.httpClient)
 	if err != nil {
 		return err
 	}
@@ -113,7 +116,7 @@ func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
 	ep := pc.ep
 	collection := pc.collection
 	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
-		JmeterEngineType, pc.scheduler)
+		JmeterEngineType, pc.scheduler, pc.httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +152,8 @@ func (pc *PlanController) progress() bool {
 	r := true
 	ep := pc.ep
 	collection := pc.collection
-	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID, JmeterEngineType, pc.scheduler)
+	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
+		JmeterEngineType, pc.scheduler, pc.httpClient)
 	if errors.Is(err, scheduler.IngressError) {
 		log.Error(err)
 		return true
@@ -167,7 +171,8 @@ func (pc *PlanController) term(force bool) error {
 	var wg sync.WaitGroup
 	ep := pc.ep
 	collection := pc.collection
-	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID, JmeterEngineType, pc.scheduler)
+	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
+		JmeterEngineType, pc.scheduler, pc.httpClient)
 	if err != nil {
 		return err
 	}

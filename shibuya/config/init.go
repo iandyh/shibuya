@@ -1,6 +1,9 @@
 package config
 
 import (
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -131,6 +134,11 @@ type MetricStorage struct {
 	RemoteWriteToken string `json:"token"`
 }
 
+type CAPair struct {
+	Cert       *x509.Certificate
+	PrivateKey *rsa.PrivateKey
+}
+
 type ShibuyaConfig struct {
 	ProjectHome      string           `json:"project_home"`
 	UploadFileHelp   string           `json:"upload_file_help"`
@@ -153,10 +161,23 @@ type ShibuyaConfig struct {
 	Context         string
 	HTTPClient      *http.Client
 	HTTPProxyClient *http.Client
+
+	CAPair *CAPair
 }
 
 func loadContext() string {
 	return os.Getenv("env")
+}
+
+func LoadCaCert(certPath, keyPath string) *CAPair {
+	tlscert, err := tls.LoadX509KeyPair(certPath, keyPath)
+	if err != nil {
+		log.Fatalf("Fail to load ca cert %v", err)
+	}
+	return &CAPair{
+		PrivateKey: tlscert.PrivateKey.(*rsa.PrivateKey),
+		Cert:       tlscert.Leaf,
+	}
 }
 
 func (sc *ShibuyaConfig) makeHTTPClients() {
@@ -201,6 +222,9 @@ func SetupLogging(sc ShibuyaConfig) {
 
 func LoadConfig() ShibuyaConfig {
 	sc := new(ShibuyaConfig)
+	certPath := "/tls/tls.crt"
+	keyPath := "/tls/tls.key"
+	sc.CAPair = LoadCaCert(certPath, keyPath)
 	f, err := os.Open(ConfigFilePath)
 	if err != nil {
 		log.Fatal("Cannot find config file")

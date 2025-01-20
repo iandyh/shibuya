@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
@@ -38,12 +37,6 @@ type engineType struct{}
 
 var JmeterEngineType engineType
 
-// HttPClient shared by the engines to contact with the container
-// deployed in the k8s cluster
-var engineHttpClient = &http.Client{
-	Timeout: 30 * time.Second,
-}
-
 type shibuyaMetric struct {
 	threads      float64
 	latency      float64
@@ -71,15 +64,16 @@ type baseEngine struct {
 	stream       *es.Stream
 	cancel       context.CancelFunc
 	runID        int64
+	httpClient   *http.Client
 	*config.ExecutorContainer
 }
 
-func sendTriggerRequest(url string, edc *enginesModel.EngineDataConfig) (*http.Response, error) {
+func sendTriggerRequest(url string, edc *enginesModel.EngineDataConfig, httpClient *http.Client) (*http.Response, error) {
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(&edc)
 	req, _ := http.NewRequest("POST", url, body)
 	req.Header.Set("Content-Type", "application/json")
-	return engineHttpClient.Do(req)
+	return httpClient.Do(req)
 }
 
 func (be *baseEngine) EngineID() int {
@@ -91,7 +85,7 @@ func (be *baseEngine) makeBaseUrl() string {
 	if strings.Contains(be.engineUrl, "http") {
 		return base
 	}
-	return "http://" + base
+	return "https://" + base
 }
 
 func (be *baseEngine) subscribe(runID int64) error {
@@ -104,7 +98,9 @@ func (be *baseEngine) subscribe(runID int64) error {
 	log.Printf("Subscribing to engine url %s", streamUrl)
 	ctx, cancel := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
-	httpClient := &http.Client{}
+	httpClient := &http.Client{
+		Transport: be.httpClient.Transport,
+	}
 	stream, err := es.SubscribeWith("", httpClient, req)
 	if err != nil {
 		cancel()
@@ -122,7 +118,7 @@ func (be *baseEngine) progress() bool {
 	var resp *http.Response
 	var httpError error
 	err := utils.Retry(func() error {
-		resp, httpError = engineHttpClient.Get(progressEndpoint)
+		resp, httpError = be.httpClient.Get(progressEndpoint)
 		return httpError
 	}, nil)
 	if err != nil {
@@ -149,7 +145,7 @@ func (be *baseEngine) terminate(force bool) error {
 	}
 	base := be.makeBaseUrl()
 	stopUrl := fmt.Sprintf(base, be.engineUrl, "stop")
-	resp, err := engineHttpClient.Post(stopUrl, "application/x-www-form-urlencoded", nil)
+	resp, err := be.httpClient.Post(stopUrl, "application/x-www-form-urlencoded", nil)
 	if err != nil {
 		return err
 	}
@@ -166,7 +162,7 @@ func (be *baseEngine) trigger(edc *enginesModel.EngineDataConfig) error {
 	base := be.makeBaseUrl()
 	url := fmt.Sprintf(base, engineUrl, "start")
 	return utils.Retry(func() error {
-		resp, err := sendTriggerRequest(url, edc)
+		resp, err := sendTriggerRequest(url, edc, be.httpClient)
 		if err != nil {
 			return err
 		}
@@ -203,13 +199,15 @@ func findEngineConfig(et engineType, sc config.ShibuyaConfig) *config.ExecutorCo
 	return nil
 }
 
-func generateEngines(enginesRequired int, planID, collectionID, projectID int64, et engineType) (engines []shibuyaEngine, err error) {
+func generateEngines(enginesRequired int, planID, collectionID, projectID int64,
+	et engineType, httpClient *http.Client) (engines []shibuyaEngine, err error) {
 	for i := 0; i < enginesRequired; i++ {
 		engineC := &baseEngine{
 			ID:           i,
 			projectID:    projectID,
 			collectionID: collectionID,
 			planID:       planID,
+			httpClient:   httpClient,
 		}
 		var e shibuyaEngine
 		switch et {
@@ -223,8 +221,9 @@ func generateEngines(enginesRequired int, planID, collectionID, projectID int64,
 	return engines, nil
 }
 
-func generateEnginesWithUrl(enginesRequired int, planID, collectionID, projectID int64, et engineType, scheduler scheduler.EngineScheduler) (engines []shibuyaEngine, err error) {
-	engines, err = generateEngines(enginesRequired, planID, collectionID, projectID, et)
+func generateEnginesWithUrl(enginesRequired int, planID, collectionID, projectID int64, et engineType, scheduler scheduler.EngineScheduler,
+	httpClient *http.Client) (engines []shibuyaEngine, err error) {
+	engines, err = generateEngines(enginesRequired, planID, collectionID, projectID, et, httpClient)
 	if err != nil {
 		return nil, err
 	}

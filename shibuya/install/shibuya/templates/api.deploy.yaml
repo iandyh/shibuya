@@ -52,6 +52,9 @@ spec:
         ports:
           - containerPort: 8080
         volumeMounts:
+        - name: shibuya-ca
+          mountPath: "/tls"
+          readOnly: true
         - name: shibuya-config
           mountPath: /config.json
           subPath: config.json
@@ -66,6 +69,9 @@ spec:
           subPath: shibuya-gcp.json
         {{- end }}
       volumes:
+      - name: shibuya-ca
+        secret:
+          secretName: shibuya-ca-crt
       - name: shibuya-config
         configMap:
           name: shibuya-config-{{ .Values.context }}

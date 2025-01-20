@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"net/http"
 	"strconv"
 	"sync"
@@ -28,10 +30,17 @@ type Controller struct {
 }
 
 func NewController(sc config.ShibuyaConfig) *Controller {
+	pool := x509.NewCertPool()
+	pool.AddCert(sc.CAPair.Cert)
 	c := &Controller{
 		filePath: "/test-data",
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 5 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: pool,
+				},
+			},
 		},
 		ApiClosingClients:      make(chan *ApiMetricStream),
 		ApiNewClients:          make(chan *ApiMetricStream),
@@ -209,7 +218,7 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 			wg.Add(1)
 			go func(ep *model.ExecutionPlan) {
 				defer wg.Done()
-				pc := NewPlanController(ep, collection, c.Scheduler, c.sc)
+				pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
 				utils.Retry(func() error {
 					return pc.deploy()
 				}, nil)

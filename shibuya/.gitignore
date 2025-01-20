@@ -1,2 +1,4 @@
 *.tgz
 shibuya-install/*
+ca/*
+certmanager/test-*.pem
