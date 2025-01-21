@@ -540,6 +540,7 @@ func (ca *CollectionAPI) collectionStatusHandler(w http.ResponseWriter, r *http.
 	collectionStatus, err := ca.ctr.CollectionStatus(collection)
 	if err != nil {
 		handleErrors(w, err)
+		return
 	}
 	renderJSON(w, http.StatusOK, collectionStatus)
 }
