@@ -12,21 +12,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/rakutentech/shibuya/shibuya/certmanager"
 	"github.com/rakutentech/shibuya/shibuya/config"
-	"github.com/rakutentech/shibuya/shibuya/engines/metrics"
 	model "github.com/rakutentech/shibuya/shibuya/model"
-	"github.com/rakutentech/shibuya/shibuya/object_storage"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	log "github.com/sirupsen/logrus"
 
-	"gopkg.in/yaml.v2"
-	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -59,331 +52,6 @@ func NewK8sClientManager(cfg config.ShibuyaConfig) *K8sClientManager {
 	}
 }
 
-func makeNodeAffinity(key, value string) *apiv1.NodeAffinity {
-	nodeAffinity := &apiv1.NodeAffinity{
-		RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{
-			NodeSelectorTerms: []apiv1.NodeSelectorTerm{
-				{
-					MatchExpressions: []apiv1.NodeSelectorRequirement{
-						{
-							Key:      key,
-							Operator: apiv1.NodeSelectorOpIn,
-							Values: []string{
-								value,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	return nodeAffinity
-}
-
-func prepareEngineMetaEnvvars(collectionID, planID int64) []apiv1.EnvVar {
-	return []apiv1.EnvVar{
-		{
-			Name:  "collection_id",
-			Value: fmt.Sprintf("%d", collectionID),
-		},
-		{
-			Name:  "plan_id",
-			Value: fmt.Sprintf("%d", planID),
-		},
-	}
-}
-
-func makeTolerations(key string, value string, effect apiv1.TaintEffect) apiv1.Toleration {
-	toleration := apiv1.Toleration{
-		Effect:   effect,
-		Key:      key,
-		Operator: apiv1.TolerationOpEqual,
-		Value:    value,
-	}
-	return toleration
-}
-
-func collectionNodeAffinity(collectionID int64) *apiv1.NodeAffinity {
-	collectionIDStr := fmt.Sprintf("%d", collectionID)
-	return makeNodeAffinity("collection_id", collectionIDStr)
-}
-
-func makePodAffinity(key, value string) *apiv1.PodAffinity {
-	podAffinity := &apiv1.PodAffinity{
-		PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
-			{
-				Weight: 100,
-				PodAffinityTerm: apiv1.PodAffinityTerm{
-					LabelSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							key: value,
-						},
-					},
-					TopologyKey: "kubernetes.io/hostname",
-				},
-			},
-		},
-	}
-	return podAffinity
-}
-
-func collectionPodAffinity(collectionID int64) *apiv1.PodAffinity {
-	collectionIDStr := fmt.Sprintf("%d", collectionID)
-	return makePodAffinity("collection", collectionIDStr)
-}
-
-func prepareAffinity(collectionID int64, nodeAffinity []map[string]string) *apiv1.Affinity {
-	affinity := &apiv1.Affinity{}
-	affinity.PodAffinity = collectionPodAffinity(collectionID)
-	if len(nodeAffinity) > 0 {
-		t := nodeAffinity[0]
-		affinity.NodeAffinity = makeNodeAffinity(t["key"], t["value"])
-		return affinity
-	}
-	return affinity
-}
-
-func prepareTolerations(stolerations []config.Toleration) []apiv1.Toleration {
-	tolerations := []apiv1.Toleration{}
-
-	if len(stolerations) > 0 {
-		for _, t := range stolerations {
-			tolerations = append(tolerations, makeTolerations(t.Key, t.Value, t.Effect))
-		}
-	}
-	return tolerations
-}
-
-func (kcm *K8sClientManager) makeHostAliases() []apiv1.HostAlias {
-	preConfighostAliases := kcm.sc.ExecutorConfig.HostAliases
-	if preConfighostAliases != nil {
-		hostAliases := []apiv1.HostAlias{}
-		for _, ha := range preConfighostAliases {
-			hostAliases = append(hostAliases, apiv1.HostAlias{
-				Hostnames: []string{ha.Hostname},
-				IP:        ha.IP,
-			})
-		}
-		return hostAliases
-	}
-	return []apiv1.HostAlias{}
-}
-
-func (kcm *K8sClientManager) generatePlanDeployment(planName string, replicas int, labels map[string]string, containerConfig *config.ExecutorContainer,
-	affinity *apiv1.Affinity, tolerations []apiv1.Toleration, envvars []apiv1.EnvVar) appsv1.StatefulSet {
-	t := true
-	volumes := []apiv1.Volume{}
-	volumeMounts := []apiv1.VolumeMount{}
-	if object_storage.IsProviderGCP(kcm.sc.ObjectStorage.Provider) {
-		volumeName := "shibuya-gcp-auth"
-		secretName := kcm.sc.ObjectStorage.SecretName
-		authFileName := kcm.sc.ObjectStorage.AuthFileName
-		mountPath := fmt.Sprintf("/auth/%s", authFileName)
-		v := apiv1.Volume{
-			Name: volumeName,
-			VolumeSource: apiv1.VolumeSource{
-				Secret: &apiv1.SecretVolumeSource{
-					SecretName: secretName,
-				},
-			},
-		}
-		volumes = append(volumes, v)
-		vm := apiv1.VolumeMount{
-			Name:      volumeName,
-			MountPath: mountPath,
-			SubPath:   authFileName,
-		}
-		volumeMounts = append(volumeMounts, vm)
-		envvar := apiv1.EnvVar{
-			Name:  "GOOGLE_APPLICATION_CREDENTIALS",
-			Value: mountPath,
-		}
-		envvars = append(envvars, envvar)
-	}
-	cmVolumeName := "shibuya-config"
-	cmName := kcm.sc.ObjectStorage.ConfigMapName
-	cmVolume := apiv1.Volume{
-		Name: cmVolumeName,
-		VolumeSource: apiv1.VolumeSource{
-			ConfigMap: &apiv1.ConfigMapVolumeSource{
-				LocalObjectReference: apiv1.LocalObjectReference{
-					Name: cmName,
-				},
-			},
-		},
-	}
-	volumes = append(volumes, cmVolume)
-	cmVolumeMounts := apiv1.VolumeMount{
-		Name:      cmVolumeName,
-		MountPath: config.ConfigFilePath,
-		SubPath:   config.ConfigFileName,
-	}
-	volumeMounts = append(volumeMounts, cmVolumeMounts)
-	deployment := appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:                       planName,
-			DeletionGracePeriodSeconds: new(int64),
-			Labels:                     labels,
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas:            int32Ptr(int32(replicas)),
-			PodManagementPolicy: appsv1.ParallelPodManagement,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: apiv1.PodSpec{
-					Affinity:                     affinity,
-					Tolerations:                  tolerations,
-					AutomountServiceAccountToken: &t,
-					ImagePullSecrets: []apiv1.LocalObjectReference{
-						{
-							Name: kcm.sc.ExecutorConfig.ImagePullSecret,
-						},
-					},
-					TerminationGracePeriodSeconds: new(int64),
-					HostAliases:                   kcm.makeHostAliases(),
-					Volumes:                       volumes,
-					Containers: []apiv1.Container{
-						{
-							Name:            planName,
-							Image:           containerConfig.Image,
-							ImagePullPolicy: kcm.sc.ExecutorConfig.ImagePullPolicy,
-							Env:             envvars,
-							Resources: apiv1.ResourceRequirements{
-								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(containerConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(containerConfig.Mem),
-								},
-								Requests: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(containerConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(containerConfig.Mem),
-								},
-							},
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http",
-									Protocol:      apiv1.ProtocolTCP,
-									ContainerPort: 8080,
-								},
-							},
-							VolumeMounts: volumeMounts,
-						},
-					},
-				},
-			},
-		},
-	}
-	return deployment
-}
-
-func (kcm *K8sClientManager) generateEngineDeployment(engineName string, labels map[string]string,
-	containerConfig *config.ExecutorContainer, affinity *apiv1.Affinity,
-	tolerations []apiv1.Toleration) appsv1.Deployment {
-	t := true
-	deployment := appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:                       engineName,
-			DeletionGracePeriodSeconds: new(int64),
-			Labels:                     labels,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: apiv1.PodSpec{
-					Affinity:                     affinity,
-					Tolerations:                  tolerations,
-					ServiceAccountName:           kcm.serviceAccount,
-					AutomountServiceAccountToken: &t,
-					ImagePullSecrets: []apiv1.LocalObjectReference{
-						{
-							Name: kcm.sc.ExecutorConfig.ImagePullSecret,
-						},
-					},
-					TerminationGracePeriodSeconds: new(int64),
-					HostAliases:                   kcm.makeHostAliases(),
-					Containers: []apiv1.Container{
-						{
-							Name:            engineName,
-							Image:           containerConfig.Image,
-							ImagePullPolicy: kcm.sc.ExecutorConfig.ImagePullPolicy,
-							Resources: apiv1.ResourceRequirements{
-								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(containerConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(containerConfig.Mem),
-								},
-								Requests: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(containerConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(containerConfig.Mem),
-								},
-							},
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http",
-									Protocol:      apiv1.ProtocolTCP,
-									ContainerPort: 8080,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	return deployment
-}
-
-func (kcm *K8sClientManager) deploy(deployment *appsv1.Deployment) error {
-	deploymentsClient := kcm.client.AppsV1().Deployments(kcm.Namespace)
-	_, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
-	if errors.IsAlreadyExists(err) {
-		// do nothing if already exists
-		return nil
-	} else if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (kcm *K8sClientManager) expose(name string, labels map[string]string) error {
-	service := &apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Annotations: map[string]string{
-				"networking.istio.io/exportTo": ".",
-			},
-			Labels: labels,
-		},
-		Spec: apiv1.ServiceSpec{
-			Selector: labels,
-			Ports: []apiv1.ServicePort{
-				{
-					Port:       443,
-					TargetPort: intstr.FromString("http"),
-				},
-			},
-		},
-	}
-	switch kcm.sc.ExecutorConfig.Cluster.ServiceType {
-	case "NodePort":
-		service.Spec.Type = apiv1.ServiceTypeNodePort
-	case "LoadBalancer":
-		service.Spec.ExternalTrafficPolicy = "Local"
-		service.Spec.Type = apiv1.ServiceTypeLoadBalancer
-	}
-	_, err := kcm.client.CoreV1().Services(kcm.Namespace).Create(context.TODO(), service, metav1.CreateOptions{})
-	return err
-}
-
 func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
 	podList, err := kcm.client.CoreV1().Pods(kcm.Namespace).
 		List(context.TODO(), metav1.ListOptions{
@@ -403,43 +71,18 @@ func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
 	}
 }
 
-func (kcm *K8sClientManager) makePlanService(name string, label map[string]string) *apiv1.Service {
-	service := &apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Annotations: map[string]string{
-				"networking.istio.io/exportTo": ".",
-			},
-			Labels: label,
-		},
-		Spec: apiv1.ServiceSpec{
-			Type:      apiv1.ServiceTypeClusterIP,
-			ClusterIP: "None",
-			Selector:  label,
-			Ports: []apiv1.ServicePort{
-				{
-					Port:       80,
-					TargetPort: intstr.FromInt(8080),
-				},
-			},
-		},
-	}
-	return service
-}
-
 func (kcm *K8sClientManager) DeployPlan(projectID, collectionID, planID int64, enginesNo int, containerconfig *config.ExecutorContainer) error {
-	planName := makePlanName(projectID, collectionID, planID)
-	labels := makePlanLabel(projectID, collectionID, planID)
-	affinity := prepareAffinity(collectionID, kcm.sc.ExecutorConfig.NodeAffinity)
-	envvars := prepareEngineMetaEnvvars(collectionID, planID)
-	tolerations := prepareTolerations(kcm.sc.ExecutorConfig.Tolerations)
-	planConfig := kcm.generatePlanDeployment(planName, enginesNo, labels, containerconfig, affinity, tolerations, envvars)
-	if _, err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Create(context.TODO(), &planConfig, metav1.CreateOptions{}); err != nil {
+	pr := planResource{projectID, collectionID, planID}
+	planSts := pr.makePlanDeployment(enginesNo, kcm.sc)
+	if _, err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Create(context.TODO(), planSts, metav1.CreateOptions{}); err != nil {
 		return err
 	}
-	service := kcm.makePlanService(planName, labels)
-	if _, err := kcm.client.CoreV1().Services(kcm.Namespace).Create(context.TODO(), service, metav1.CreateOptions{}); err != nil {
-		log.Println(err)
+	service := pr.makePlanService()
+	serviceClient := kcm.client.CoreV1().Services(kcm.Namespace)
+	if _, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{}); err != nil {
+		if errors.IsAlreadyExists(err) {
+			return nil
+		}
 		return err
 	}
 	return nil
@@ -510,9 +153,10 @@ func (kcm *K8sClientManager) FetchEngineUrlsByPlan(collectionID, planID int64, o
 	if err != nil {
 		return nil, err
 	}
+	pr := planResource{opts.ProjectID, collectionID, planID}
 	urls := []string{}
 	for i := 0; i < opts.EnginesCount; i++ {
-		engineSvcName := makeEngineName(opts.ProjectID, collectionID, planID, i)
+		engineSvcName := pr.makeEngineName(i)
 		u := fmt.Sprintf("%s/%s", collectionUrl, engineSvcName)
 		urls = append(urls, u)
 	}
@@ -713,6 +357,7 @@ func (kcm *K8sClientManager) deleteDeployment(collectionID int64) error {
 }
 
 func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
+	cr := collectionResource(collectionID)
 	err := kcm.deleteDeployment(collectionID)
 	if err != nil {
 		return err
@@ -721,11 +366,11 @@ func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := kcm.client.CoreV1().ConfigMaps(kcm.Namespace).Delete(context.TODO(),
-		makePromConfigName(collectionID), metav1.DeleteOptions{}); err != nil {
+	if err := kcm.client.CoreV1().ConfigMaps(kcm.Namespace).Delete(context.TODO(), cr.makePromConfigName(),
+		metav1.DeleteOptions{}); err != nil {
 		return err
 	}
-	if err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Delete(context.TODO(), makeScraperDeploymentName(collectionID),
+	if err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Delete(context.TODO(), cr.makeScraperDeploymentName(),
 		metav1.DeleteOptions{}); err != nil {
 		return err
 	}
@@ -733,15 +378,15 @@ func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
 }
 
 func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
-	igName := makeIngressClass(projectID)
+	name := projectResource(projectID).makeName()
 	deleteOpts := metav1.DeleteOptions{}
-	if err := kcm.client.AppsV1().Deployments(kcm.Namespace).Delete(context.TODO(), igName, deleteOpts); err != nil {
+	if err := kcm.client.AppsV1().Deployments(kcm.Namespace).Delete(context.TODO(), name, deleteOpts); err != nil {
 		log.Error(err)
 	}
-	if err := kcm.client.CoreV1().Services(kcm.Namespace).Delete(context.TODO(), igName, deleteOpts); err != nil {
+	if err := kcm.client.CoreV1().Services(kcm.Namespace).Delete(context.TODO(), name, deleteOpts); err != nil {
 		log.Error(err)
 	}
-	if err := kcm.client.CoreV1().Secrets(kcm.Namespace).Delete(context.TODO(), igName, deleteOpts); err != nil {
+	if err := kcm.client.CoreV1().Secrets(kcm.Namespace).Delete(context.TODO(), name, deleteOpts); err != nil {
 		log.Error(err)
 	}
 	return nil
@@ -749,208 +394,20 @@ func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
 
 func int32Ptr(i int32) *int32 { return &i }
 
-func (kcm *K8sClientManager) generateControllerDeployment(igName string, projectID int64,
-	volumes []apiv1.Volume, volumeMounts []apiv1.VolumeMount) appsv1.Deployment {
-	tolerations := prepareTolerations(kcm.sc.ExecutorConfig.Tolerations)
-	t := true
-	labels := makeIngressControllerLabel(projectID)
-	deployment := appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   igName,
-			Labels: labels,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(kcm.sc.IngressConfig.Replicas),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-					Annotations: map[string]string{
-						"prometheus.io/port":   "10254",
-						"prometheus.io/scrape": "true",
-					},
-				},
-				Spec: apiv1.PodSpec{
-					Tolerations:                   tolerations,
-					ServiceAccountName:            kcm.serviceAccount,
-					TerminationGracePeriodSeconds: new(int64),
-					AutomountServiceAccountToken:  &t,
-					Volumes:                       volumes,
-					Containers: []apiv1.Container{
-						{
-							Name:  "shibuya-ingress-controller",
-							Image: kcm.sc.IngressConfig.Image,
-							Resources: apiv1.ResourceRequirements{
-								// Limits are whatever Kubernetes sets as the max value
-								Requests: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(kcm.sc.IngressConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(kcm.sc.IngressConfig.Mem),
-								},
-								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(kcm.sc.IngressConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(kcm.sc.IngressConfig.Mem),
-								},
-							},
-							SecurityContext: &apiv1.SecurityContext{
-								Capabilities: &apiv1.Capabilities{
-									Drop: []apiv1.Capability{
-										"ALL",
-									},
-									Add: []apiv1.Capability{
-										"NET_BIND_SERVICE",
-									},
-								},
-							},
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http",
-									ContainerPort: 8080,
-								},
-								{
-									Name:          "https",
-									ContainerPort: 443,
-								},
-							},
-							Env: []apiv1.EnvVar{
-								{
-									Name: "POD_NAME",
-									ValueFrom: &apiv1.EnvVarSource{
-										FieldRef: &apiv1.ObjectFieldSelector{
-											FieldPath: "metadata.name",
-										},
-									},
-								},
-								{
-									Name: "POD_NAMESPACE",
-									ValueFrom: &apiv1.EnvVarSource{
-										FieldRef: &apiv1.ObjectFieldSelector{
-											FieldPath: "metadata.namespace",
-										},
-									},
-								},
-								{
-									Name:  "project_id",
-									Value: fmt.Sprintf("%d", projectID),
-								},
-							},
-							VolumeMounts: volumeMounts,
-						},
-					},
-				},
-			},
-		},
-	}
-	return deployment
-}
-
-func (kcm *K8sClientManager) makeScraperConfig(collectionID int64) (apiv1.ConfigMap, error) {
-	empty := apiv1.ConfigMap{}
-	pc, err := metrics.MakeScraperConfig(collectionID, kcm.Namespace, kcm.sc.MetricStorage)
-	if err != nil {
-		return empty, err
-	}
-	c, err := yaml.Marshal(pc)
-	if err != nil {
-		return empty, err
-	}
-	data := map[string]string{}
-	data["prometheus.yml"] = string(c)
-	labels := makeScraperLabel(collectionID)
-	return apiv1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      makePromConfigName(collectionID),
-			Namespace: kcm.Namespace,
-			Labels:    labels,
-		},
-		Data: data,
-	}, nil
-}
-
-func (kcm *K8sClientManager) makeScraperDeployment(collectionID int64) appsv1.StatefulSet {
-	workloadName := makeScraperDeploymentName(collectionID)
-	labels := makeScraperLabel(collectionID)
-	// Currently scraper shares the affinity and tolerations with executors
-	affinity := prepareAffinity(collectionID, kcm.sc.ExecutorConfig.NodeAffinity)
-	tolerations := prepareTolerations(kcm.sc.ExecutorConfig.Tolerations)
-	scraperContainer := kcm.sc.ScraperContainer
-	return appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      workloadName,
-			Namespace: kcm.Namespace,
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Replicas: int32Ptr(1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: labels,
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: labels,
-				},
-				Spec: apiv1.PodSpec{
-					ServiceAccountName: kcm.serviceAccount,
-					Affinity:           affinity,
-					Tolerations:        tolerations,
-					Containers: []apiv1.Container{
-						{
-							Name:  "prom",
-							Image: scraperContainer.Image,
-							Resources: apiv1.ResourceRequirements{
-								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(scraperContainer.CPU),
-									apiv1.ResourceMemory: resource.MustParse(scraperContainer.Mem),
-								},
-								Requests: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(scraperContainer.CPU),
-									apiv1.ResourceMemory: resource.MustParse(scraperContainer.Mem),
-								},
-							},
-							Ports: []apiv1.ContainerPort{
-								{
-									ContainerPort: int32(9090),
-								},
-							},
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      "prom-config",
-									MountPath: "/etc/prometheus",
-								},
-							},
-						},
-					},
-					Volumes: []apiv1.Volume{
-						{
-							Name: "prom-config",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: makePromConfigName(collectionID),
-									},
-									DefaultMode: int32Ptr(420),
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
 func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
-	promDeployment := kcm.makeScraperDeployment(collectionID)
-	promConfig, err := kcm.makeScraperConfig(collectionID)
+	cr := collectionResource(collectionID)
+	promDeployment := cr.makeScraperDeployment(kcm.serviceAccount, kcm.Namespace,
+		kcm.sc.ExecutorConfig.NodeAffinity, kcm.sc.ExecutorConfig.Tolerations, kcm.sc.ScraperContainer)
+	promConfig, err := cr.makeScraperConfig(kcm.Namespace, kcm.sc.MetricStorage)
 	if err != nil {
 		return err
 	}
-	if _, err := kcm.client.CoreV1().ConfigMaps(kcm.Namespace).Create(context.TODO(), &promConfig, metav1.CreateOptions{}); err != nil {
+	if _, err := kcm.client.CoreV1().ConfigMaps(kcm.Namespace).Create(context.TODO(), promConfig, metav1.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
 		}
 	}
-	if _, err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Create(context.TODO(), &promDeployment, metav1.CreateOptions{}); err != nil {
+	if _, err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Create(context.TODO(), promDeployment, metav1.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
 		}
@@ -960,11 +417,12 @@ func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
 }
 
 func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
-	igName := makeIngressClass(projectID)
-	labels := makeIngressControllerLabel(projectID)
+	prj := projectResource(projectID)
+	service := prj.makeIngressService(kcm.sc.ExecutorConfig.Cluster.ServiceType)
 	// We firstly need to expose the project because we need to the external
 	// IP for the certs
-	if err := kcm.expose(igName, labels); err != nil {
+	serviceClient := kcm.client.CoreV1().Services(kcm.Namespace)
+	if _, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{}); err != nil {
 		if errors.IsAlreadyExists(err) {
 			return nil
 		}
@@ -993,27 +451,23 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
 		}
 		log.Infof("wait loop is out and the external IP is %s", externalIP)
 		if externalIP != "" {
-			cert, key, err := certmanager.GenCertAndKey(kcm.CAPair, projectID, externalIP)
+			secret, err := prj.makeKeyPairSecret(kcm.sc.CAPair, externalIP)
 			if err != nil {
 				log.Error(err)
 				return
 			}
-			secret := makeCertKeySecret(projectID, cert, key)
 			if _, err := kcm.client.CoreV1().Secrets(kcm.Namespace).Create(context.TODO(),
 				secret, metav1.CreateOptions{}); err != nil {
 				log.Error(err)
 				return
 			}
-			volumeName := "tls"
-			volumes := []apiv1.Volume{
-				makeSecretVolume(volumeName, makeIngressClass(projectID))}
-			volumeMounts := []apiv1.VolumeMount{
-				makeVolumeMount(volumeName, "/tls", true)}
-			deployment := kcm.generateControllerDeployment(makeIngressClass(projectID), projectID,
-				volumes, volumeMounts)
+			igCfg := kcm.sc.IngressConfig
+			deployment := prj.makeCoordinatorDeployment(kcm.serviceAccount, igCfg.Image, igCfg.CPU,
+				igCfg.Mem, igCfg.Replicas, kcm.sc.ExecutorConfig.Tolerations, secret)
 			// there could be duplicated controller deployment from multiple collections
 			// This method has already taken it into considertion.
-			if err := kcm.deploy(&deployment); err != nil {
+			deployClient := kcm.client.AppsV1().Deployments(kcm.Namespace)
+			if _, err := deployClient.Create(context.TODO(), deployment, metav1.CreateOptions{}); err != nil {
 				log.Error(err)
 			}
 		}
