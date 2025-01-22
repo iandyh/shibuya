@@ -337,32 +337,14 @@ func (kcm *K8sClientManager) deleteService(collectionID int64) error {
 	return lastError
 }
 
-func (kcm *K8sClientManager) deleteDeployment(collectionID int64) error {
-	ls := fmt.Sprintf("collection=%d", collectionID)
-	deploymentsClient := kcm.client.AppsV1().Deployments(kcm.Namespace)
-	err := deploymentsClient.DeleteCollection(context.TODO(), metav1.DeleteOptions{
-		GracePeriodSeconds: new(int64),
-	}, metav1.ListOptions{
-		LabelSelector: ls,
-	})
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-	if err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).DeleteCollection(context.TODO(),
-		metav1.DeleteOptions{GracePeriodSeconds: new(int64)}, metav1.ListOptions{LabelSelector: ls}); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
 	cr := collectionResource(collectionID)
-	err := kcm.deleteDeployment(collectionID)
-	if err != nil {
+	label := cr.makeCollectionLabelSelector()
+	if err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).DeleteCollection(context.TODO(),
+		metav1.DeleteOptions{GracePeriodSeconds: new(int64)}, metav1.ListOptions{LabelSelector: label}); err != nil {
 		return err
 	}
-	err = kcm.deleteService(collectionID)
+	err := kcm.deleteService(collectionID)
 	if err != nil {
 		return err
 	}

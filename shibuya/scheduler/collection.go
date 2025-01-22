@@ -124,3 +124,7 @@ func (cr collectionResource) makeScraperLabels() map[string]string {
 func (cr collectionResource) makePromConfigName() string {
 	return fmt.Sprintf("prom-collection-%d", cr)
 }
+
+func (cr collectionResource) makeCollectionLabelSelector() string {
+	return makeCollectionLabel(int64(cr))
+}
