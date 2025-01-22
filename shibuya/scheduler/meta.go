@@ -8,6 +8,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func int32Ptr(i int32) *int32 { return &i }
+
 func makeNodeAffinity(key, value string) *apiv1.NodeAffinity {
 	nodeAffinity := &apiv1.NodeAffinity{
 		RequiredDuringSchedulingIgnoredDuringExecution: &apiv1.NodeSelector{

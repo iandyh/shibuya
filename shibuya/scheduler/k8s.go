@@ -370,8 +370,6 @@ func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
 	return nil
 }
 
-func int32Ptr(i int32) *int32 { return &i }
-
 func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
 	cr := collectionResource(collectionID)
 	promDeployment := cr.makeScraperDeployment(kcm.serviceAccount, kcm.Namespace,
