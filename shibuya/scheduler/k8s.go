@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	e "errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -269,7 +269,7 @@ func (kcm *K8sClientManager) FetchLogFromPod(pod apiv1.Pod) (string, error) {
 		return "", err
 	}
 	defer readCloser.Close()
-	c, err := ioutil.ReadAll(readCloser)
+	c, err := io.ReadAll(readCloser)
 	if err != nil {
 		return "", err
 	}
