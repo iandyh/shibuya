@@ -13,6 +13,7 @@ import (
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
 	sos "github.com/rakutentech/shibuya/shibuya/object_storage"
 	"github.com/rakutentech/shibuya/shibuya/scheduler"
+	k8s "github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	"github.com/rakutentech/shibuya/shibuya/utils"
 
@@ -26,7 +27,7 @@ type shibuyaEngine interface {
 	subscribe(runID int64) error
 	progress() bool
 	readMetrics() chan *shibuyaMetric
-	reachable(*scheduler.K8sClientManager) bool
+	reachable(*k8s.K8sClientManager) bool
 	closeStream()
 	terminate(force bool) error
 	EngineID() int
@@ -128,7 +129,7 @@ func (be *baseEngine) progress() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
-func (be *baseEngine) reachable(manager *scheduler.K8sClientManager) bool {
+func (be *baseEngine) reachable(manager *k8s.K8sClientManager) bool {
 	return manager.ServiceReachable(be.engineUrl)
 }
 

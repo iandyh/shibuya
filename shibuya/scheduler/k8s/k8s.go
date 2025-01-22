@@ -1,4 +1,4 @@
-package scheduler
+package k8s
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	model "github.com/rakutentech/shibuya/shibuya/model"
+	serrors "github.com/rakutentech/shibuya/shibuya/scheduler/errors"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	log "github.com/sirupsen/logrus"
 
@@ -93,7 +94,7 @@ func (kcm *K8sClientManager) GetIngressUrl(projectID int64) (string, error) {
 	serviceClient, err := kcm.client.CoreV1().Services(kcm.Namespace).
 		Get(context.TODO(), igName, metav1.GetOptions{})
 	if err != nil {
-		return "", makeSchedulerIngressError(err)
+		return "", serrors.MakeSchedulerIngressError(err)
 	}
 	if kcm.sc.ExecutorConfig.InCluster {
 		return serviceClient.Spec.ClusterIP, nil
@@ -101,13 +102,13 @@ func (kcm *K8sClientManager) GetIngressUrl(projectID int64) (string, error) {
 	if kcm.sc.ExecutorConfig.Cluster.ServiceType == "LoadBalancer" {
 		// in case of GCP getting public IP is enough since it exposes to port 80
 		if len(serviceClient.Status.LoadBalancer.Ingress) == 0 {
-			return "", makeIPNotAssignedError()
+			return "", serrors.MakeIPNotAssignedError()
 		}
 		return serviceClient.Status.LoadBalancer.Ingress[0].IP, nil
 	}
 	ip_addr, err := kcm.getRandomHostIP()
 	if err != nil {
-		return "", makeSchedulerIngressError(err)
+		return "", serrors.MakeSchedulerIngressError(err)
 	}
 	exposedPort := serviceClient.Spec.Ports[0].NodePort
 	return fmt.Sprintf("%s:%d", ip_addr, exposedPort), nil
@@ -494,7 +495,7 @@ func (kcm *K8sClientManager) GetCollectionEnginesDetail(projectID, collectionID 
 		return nil, err
 	}
 	if len(pods) == 0 {
-		return nil, &NoResourcesFoundErr{Err: err, Message: "Cannot find the engines"}
+		return nil, &serrors.NoResourcesFoundErr{Err: err, Message: "Cannot find the engines"}
 	}
 	collectionDetails := new(smodel.CollectionDetails)
 	ingressUrl, err := kcm.GetIngressUrl(projectID)

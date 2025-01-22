@@ -1,4 +1,4 @@
-package scheduler
+package errors
 
 import (
 	"errors"
@@ -9,11 +9,11 @@ var (
 	IngressError = errors.New("Error with Ingress-")
 )
 
-func makeSchedulerIngressError(err error) error {
+func MakeSchedulerIngressError(err error) error {
 	return fmt.Errorf("%w%s", IngressError, err.Error())
 }
 
-func makeIPNotAssignedError() error {
+func MakeIPNotAssignedError() error {
 	return fmt.Errorf("%w%s", IngressError, "IP is not assigned yet")
 }
 

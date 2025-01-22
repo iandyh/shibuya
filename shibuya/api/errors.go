@@ -6,7 +6,7 @@ import (
 	"net/http"
 
 	"github.com/rakutentech/shibuya/shibuya/model"
-	"github.com/rakutentech/shibuya/shibuya/scheduler"
+	serrors "github.com/rakutentech/shibuya/shibuya/scheduler/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -49,7 +49,7 @@ func makeCollectionOwnershipError() error {
 func handleErrorsFromExt(w http.ResponseWriter, err error) error {
 	var (
 		dbe                   *model.DBError
-		noResourcesFoundError *scheduler.NoResourcesFoundErr
+		noResourcesFoundError *serrors.NoResourcesFoundErr
 	)
 	switch {
 	case errors.As(err, &dbe):

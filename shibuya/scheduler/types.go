@@ -7,6 +7,8 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/model"
+	cloudrun "github.com/rakutentech/shibuya/shibuya/scheduler/cloudrun"
+	k8s "github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -32,9 +34,9 @@ var FeatureUnavailable = errors.New("Feature unavailable")
 func NewEngineScheduler(cfg config.ShibuyaConfig) EngineScheduler {
 	switch cfg.ExecutorConfig.Cluster.Kind {
 	case "k8s":
-		return NewK8sClientManager(cfg)
+		return k8s.NewK8sClientManager(cfg)
 	case "cloudrun":
-		return NewCloudRun(cfg)
+		return cloudrun.NewCloudRun(cfg)
 	}
 	log.Fatalf("Shibuya does not support %s as scheduler", cfg.ExecutorConfig.Cluster.Kind)
 	return nil

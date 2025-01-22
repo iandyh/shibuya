@@ -11,6 +11,7 @@ import (
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	"github.com/rakutentech/shibuya/shibuya/scheduler"
+	serrors "github.com/rakutentech/shibuya/shibuya/scheduler/errors"
 	_ "github.com/rakutentech/shibuya/shibuya/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -154,7 +155,7 @@ func (pc *PlanController) progress() bool {
 	collection := pc.collection
 	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
 		JmeterEngineType, pc.scheduler, pc.httpClient)
-	if errors.Is(err, scheduler.IngressError) {
+	if errors.Is(err, serrors.IngressError) {
 		log.Error(err)
 		return true
 	} else if err != nil {

@@ -1,4 +1,4 @@
-package scheduler
+package cloudrun
 
 import (
 	"context"
@@ -390,4 +390,8 @@ func (cr *CloudRun) DownloadPodLog(collectionID, planID int64) (string, error) {
 	defer resp.Body.Close()
 	r, _ := ioutil.ReadAll(resp.Body)
 	return string(r), nil
+}
+
+func makeCollectionLabel(collectionID int64) string {
+	return fmt.Sprintf("collection=%d", collectionID)
 }
