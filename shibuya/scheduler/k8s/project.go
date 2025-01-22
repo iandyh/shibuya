@@ -17,10 +17,6 @@ import (
 
 type projectResource int64
 
-func makeIngressClass(projectID int64) string {
-	return fmt.Sprintf("ig-%d", projectID)
-}
-
 func makeIngressControllerLabel(projectID int64) map[string]string {
 	base := map[string]string{}
 	base["kind"] = smodel.IngressController

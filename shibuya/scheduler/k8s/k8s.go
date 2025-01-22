@@ -90,7 +90,7 @@ func (kcm *K8sClientManager) DeployPlan(projectID, collectionID, planID int64, e
 }
 
 func (kcm *K8sClientManager) GetIngressUrl(projectID int64) (string, error) {
-	igName := makeIngressClass(projectID)
+	igName := projectResource(projectID).makeName()
 	serviceClient, err := kcm.client.CoreV1().Services(kcm.Namespace).
 		Get(context.TODO(), igName, metav1.GetOptions{})
 	if err != nil {
@@ -127,7 +127,7 @@ func (kcm *K8sClientManager) GetPods(labelSelector, fieldSelector string) ([]api
 }
 
 func (kcm *K8sClientManager) GetPodsByCollection(collectionID int64, fieldSelector string) ([]apiv1.Pod, error) {
-	labelSelector := fmt.Sprintf("collection=%d", collectionID)
+	labelSelector := makeCollectionLabel(collectionID)
 	return kcm.GetPods(labelSelector, fieldSelector)
 }
 
