@@ -135,7 +135,7 @@ func (kcm *K8sClientManager) GetPodsByCollection(collectionID int64, fieldSelect
 }
 
 func (kcm *K8sClientManager) GetEnginesByProject(projectID int64) ([]apiv1.Pod, error) {
-	labelSelector := fmt.Sprintf("project=%d, kind=executor", projectID)
+	labelSelector := fmt.Sprintf("project=%d, kind=%s", projectID, smodel.Executor)
 	pods, err := kcm.GetPods(labelSelector, "")
 	if err != nil {
 		return nil, err
@@ -179,11 +179,11 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 	enginesReady := true
 	scraperDeployed := false
 	for _, pod := range pods {
-		if pod.Labels["kind"] == "ingress-controller" {
+		if pod.Labels["kind"] == smodel.IngressController {
 			ingressControllerDeployed = true
 			continue
 		}
-		if pod.Labels["kind"] == "scraper" {
+		if pod.Labels["kind"] == smodel.Scraper {
 			if pod.Status.Phase == apiv1.PodRunning {
 				scraperDeployed = true
 				continue
@@ -476,7 +476,7 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
 }
 
 func (kcm *K8sClientManager) GetDeployedCollections() (map[int64]time.Time, error) {
-	labelSelector := fmt.Sprintf("kind=executor")
+	labelSelector := fmt.Sprintf("kind=%s", smodel.Executor)
 	pods, err := kcm.GetPods(labelSelector, "")
 	if err != nil {
 		return nil, err
@@ -493,7 +493,7 @@ func (kcm *K8sClientManager) GetDeployedCollections() (map[int64]time.Time, erro
 }
 
 func (kcm *K8sClientManager) GetDeployedServices() (map[int64]time.Time, error) {
-	labelSelector := fmt.Sprintf("kind=ingress-controller")
+	labelSelector := fmt.Sprintf("kind=%s", smodel.IngressController)
 	services, err := kcm.client.CoreV1().Services(kcm.Namespace).List(context.TODO(), metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, err
@@ -528,7 +528,7 @@ func (kcm *K8sClientManager) GetCollectionEnginesDetail(projectID, collectionID 
 	engines := []*smodel.EngineStatus{}
 	for _, p := range pods {
 		es := new(smodel.EngineStatus)
-		if kind, _ := p.Labels["kind"]; kind != "executor" {
+		if kind, _ := p.Labels["kind"]; kind != smodel.Executor {
 			continue
 		}
 		es.Name = p.Name

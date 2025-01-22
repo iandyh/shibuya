@@ -6,6 +6,7 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
+	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -171,7 +172,7 @@ func (plan planResource) makePlanLabel() map[string]string {
 		"collection": strconv.FormatInt(plan.collectionID, 10),
 		"project":    strconv.FormatInt(plan.projectID, 10),
 		"plan":       strconv.FormatInt(plan.planID, 10),
-		"kind":       "executor",
+		"kind":       smodel.Executor,
 	}
 }
 

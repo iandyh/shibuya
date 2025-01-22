@@ -6,6 +6,12 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
+const (
+	IngressController = "ingress-controller"
+	Executor          = "executor"
+	Scraper           = "scraper"
+)
+
 type PlanStatus struct {
 	PlanID           int64     `json:"plan_id"`
 	EnginesReachable bool      `json:"engines_reachable"`

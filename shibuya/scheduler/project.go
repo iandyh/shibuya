@@ -6,6 +6,7 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/certmanager"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -22,7 +23,7 @@ func makeIngressClass(projectID int64) string {
 
 func makeIngressControllerLabel(projectID int64) map[string]string {
 	base := map[string]string{}
-	base["kind"] = "ingress-controller"
+	base["kind"] = smodel.IngressController
 	base["project"] = strconv.FormatInt(projectID, 10)
 	return base
 }
@@ -120,7 +121,7 @@ func (p projectResource) makeCoordinatorDeployment(serviceAccount, image, cpu, m
 					Volumes:                       volumes,
 					Containers: []apiv1.Container{
 						{
-							Name:  "shibuya-ingress-controller",
+							Name:  smodel.IngressController,
 							Image: image,
 							Resources: apiv1.ResourceRequirements{
 								// Limits are whatever Kubernetes sets as the max value
