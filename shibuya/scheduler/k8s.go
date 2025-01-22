@@ -125,13 +125,9 @@ func (kcm *K8sClientManager) GetPods(labelSelector, fieldSelector string) ([]api
 	return podsClient.Items, nil
 }
 
-func (kcm *K8sClientManager) GetPodsByCollection(collectionID int64, fieldSelector string) []apiv1.Pod {
+func (kcm *K8sClientManager) GetPodsByCollection(collectionID int64, fieldSelector string) ([]apiv1.Pod, error) {
 	labelSelector := fmt.Sprintf("collection=%d", collectionID)
-	pods, err := kcm.GetPods(labelSelector, fieldSelector)
-	if err != nil {
-		log.Warn(err)
-	}
-	return pods
+	return kcm.GetPods(labelSelector, fieldSelector)
 }
 
 func (kcm *K8sClientManager) GetEnginesByProject(projectID int64) ([]apiv1.Pod, error) {
@@ -167,7 +163,10 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 	planStatuses := make(map[int64]*smodel.PlanStatus)
 	var engineReachable bool
 	cs := &smodel.CollectionStatus{}
-	pods := kcm.GetPodsByCollection(collectionID, "")
+	pods, err := kcm.GetPodsByCollection(collectionID, "")
+	if err != nil {
+		return cs, err
+	}
 	ingressControllerDeployed := false
 	for _, ep := range eps {
 		ps := &smodel.PlanStatus{
@@ -206,7 +205,10 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 	}
 	// if it's unrechable, we can assume it's not in progress as well
 	fieldSelector := fmt.Sprintf("status.phase=Running")
-	ingressPods := kcm.GetPodsByCollection(collectionID, fieldSelector)
+	ingressPods, err := kcm.GetPodsByCollection(collectionID, fieldSelector)
+	if err != nil {
+		return cs, err
+	}
 	ingressControllerDeployed = len(ingressPods) >= 1
 	if !ingressControllerDeployed || !enginesReady || !scraperDeployed {
 		for _, ps := range planStatuses {
