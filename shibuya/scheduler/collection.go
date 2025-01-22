@@ -49,6 +49,7 @@ func (cr collectionResource) makeScraperDeployment(serviceAccount, namespace str
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      workloadName,
 			Namespace: namespace,
+			Labels:    labels,
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Replicas: int32Ptr(1),

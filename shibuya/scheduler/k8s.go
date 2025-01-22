@@ -370,10 +370,6 @@ func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
 		metav1.DeleteOptions{}); err != nil {
 		return err
 	}
-	if err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Delete(context.TODO(), cr.makeScraperDeploymentName(),
-		metav1.DeleteOptions{}); err != nil {
-		return err
-	}
 	return nil
 }
 
