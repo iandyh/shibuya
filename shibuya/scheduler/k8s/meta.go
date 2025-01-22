@@ -41,11 +41,6 @@ func makeTolerations(key string, value string, effect apiv1.TaintEffect) apiv1.T
 	return toleration
 }
 
-func collectionNodeAffinity(collectionID int64) *apiv1.NodeAffinity {
-	collectionIDStr := fmt.Sprintf("%d", collectionID)
-	return makeNodeAffinity("collection_id", collectionIDStr)
-}
-
 func makePodAffinity(key, value string) *apiv1.PodAffinity {
 	podAffinity := &apiv1.PodAffinity{
 		PreferredDuringSchedulingIgnoredDuringExecution: []apiv1.WeightedPodAffinityTerm{
@@ -83,7 +78,6 @@ func prepareAffinity(collectionID int64, nodeAffinity []map[string]string) *apiv
 
 func prepareTolerations(stolerations []config.Toleration) []apiv1.Toleration {
 	tolerations := []apiv1.Toleration{}
-
 	if len(stolerations) > 0 {
 		for _, t := range stolerations {
 			tolerations = append(tolerations, makeTolerations(t.Key, t.Value, t.Effect))
