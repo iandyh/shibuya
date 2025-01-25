@@ -22,9 +22,10 @@ type PlanStatus struct {
 }
 
 type CollectionStatus struct {
-	Plans      []*PlanStatus `json:"status"`
-	PoolSize   int           `json:"pool_size"`
-	PoolStatus string        `json:"pool_status"`
+	ScraperDeployed bool          `json:"scraper_deployed"`
+	Plans           []*PlanStatus `json:"status"`
+	PoolSize        int           `json:"pool_size"`
+	PoolStatus      string        `json:"pool_status"`
 }
 
 func (cs *CollectionStatus) CanBeTriggered() bool {

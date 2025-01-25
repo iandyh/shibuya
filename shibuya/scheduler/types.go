@@ -14,7 +14,7 @@ import (
 )
 
 type EngineScheduler interface {
-	DeployPlan(projectID, collectionID, planID int64, replicas int, containerConfig *config.ExecutorContainer) error
+	DeployPlan(projectID, collectionID, planID int64, replicas int, serviceIP string, containerConfig *config.ExecutorContainer) error
 	CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error)
 	CreateCollectionScraper(collectionID int64) error
 	FetchEngineUrlsByPlan(collectionID, planID int64, opts *smodel.EngineOwnerRef) ([]string, error)
@@ -24,9 +24,10 @@ type EngineScheduler interface {
 	DownloadPodLog(collectionID, planID int64) (string, error)
 	GetCollectionEnginesDetail(projectID, collectionID int64) (*smodel.CollectionDetails, error)
 	GetDeployedServices() (map[int64]time.Time, error)
-	ExposeProject(projectID int64) error
+	ExposeProject(projectID int64) (*apiv1.Service, error)
 	PurgeProjectIngress(projectID int64) error
 	GetEnginesByProject(projectID int64) ([]apiv1.Pod, error)
+	GetIngressUrl(projectID int64) (string, error)
 }
 
 var FeatureUnavailable = errors.New("Feature unavailable")

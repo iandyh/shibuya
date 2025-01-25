@@ -1,36 +1,24 @@
 package controller
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
-	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
-	sos "github.com/rakutentech/shibuya/shibuya/object_storage"
 	"github.com/rakutentech/shibuya/shibuya/scheduler"
-	k8s "github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
-	"github.com/rakutentech/shibuya/shibuya/utils"
 
 	es "github.com/iandyh/eventsource"
 	log "github.com/sirupsen/logrus"
 )
 
 type shibuyaEngine interface {
-	trigger(edc *enginesModel.EngineDataConfig) error
-	deploy(scheduler.EngineScheduler) error
 	subscribe(runID int64) error
-	progress() bool
 	readMetrics() chan *shibuyaMetric
-	reachable(*k8s.K8sClientManager) bool
 	closeStream()
-	terminate(force bool) error
-	EngineID() int
 	updateEngineUrl(url string)
 }
 
@@ -69,18 +57,6 @@ type baseEngine struct {
 	*config.ExecutorContainer
 }
 
-func sendTriggerRequest(url string, edc *enginesModel.EngineDataConfig, httpClient *http.Client) (*http.Response, error) {
-	body := new(bytes.Buffer)
-	json.NewEncoder(body).Encode(&edc)
-	req, _ := http.NewRequest("POST", url, body)
-	req.Header.Set("Content-Type", "application/json")
-	return httpClient.Do(req)
-}
-
-func (be *baseEngine) EngineID() int {
-	return be.ID
-}
-
 func (be *baseEngine) makeBaseUrl() string {
 	base := "%s/%s"
 	if strings.Contains(be.engineUrl, "http") {
@@ -113,74 +89,9 @@ func (be *baseEngine) subscribe(runID int64) error {
 	return nil
 }
 
-func (be *baseEngine) progress() bool {
-	base := be.makeBaseUrl()
-	progressEndpoint := fmt.Sprintf(base, be.engineUrl, "progress")
-	var resp *http.Response
-	var httpError error
-	err := utils.Retry(func() error {
-		resp, httpError = be.httpClient.Get(progressEndpoint)
-		return httpError
-	}, nil)
-	if err != nil {
-		return false
-	}
-	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
-}
-
-func (be *baseEngine) reachable(manager *k8s.K8sClientManager) bool {
-	return manager.ServiceReachable(be.engineUrl)
-}
-
 func (be *baseEngine) closeStream() {
 	be.cancel()
 	be.stream.Close()
-}
-
-func (be *baseEngine) terminate(force bool) error {
-	// If it's force, it means we are purging the collection
-	// In this case, we don't send the stop request to test containers
-	if force {
-		return nil
-	}
-	base := be.makeBaseUrl()
-	stopUrl := fmt.Sprintf(base, be.engineUrl, "stop")
-	resp, err := be.httpClient.Post(stopUrl, "application/x-www-form-urlencoded", nil)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	return nil
-}
-
-func (be *baseEngine) deploy(manager scheduler.EngineScheduler) error {
-	return nil
-}
-
-func (be *baseEngine) trigger(edc *enginesModel.EngineDataConfig) error {
-	engineUrl := be.engineUrl
-	base := be.makeBaseUrl()
-	url := fmt.Sprintf(base, engineUrl, "start")
-	return utils.Retry(func() error {
-		resp, err := sendTriggerRequest(url, edc, be.httpClient)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode == http.StatusConflict {
-			log.Printf("%s is already triggered", engineUrl)
-			return nil
-		}
-		if resp.StatusCode == http.StatusNotFound {
-			return fmt.Errorf("%w: Some test files are missing. Please stop collection re-upload them", sos.FileNotFoundError())
-		}
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("Engine failed to trigger: %d %s", resp.StatusCode, resp.Status)
-		}
-		log.Printf("%s is triggered", engineUrl)
-		return nil
-	}, sos.FileNotFoundError())
 }
 
 func (be *baseEngine) readMetrics() chan *shibuyaMetric {

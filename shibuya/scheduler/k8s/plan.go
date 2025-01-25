@@ -3,9 +3,9 @@ package k8s
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
-	"github.com/rakutentech/shibuya/shibuya/object_storage"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
@@ -18,62 +18,15 @@ type planResource struct {
 	projectID, collectionID, planID int64
 }
 
-func (plan planResource) makePlanDeployment(replicas int, sc config.ShibuyaConfig,
+func (plan planResource) makePlanDeployment(replicas int, serviceIP string, sc config.ShibuyaConfig,
 ) *appsv1.StatefulSet {
 	planName := plan.makeName()
-	envvars := plan.makeEngineMetaEnvvars()
+	envvars := plan.makeEngineMetaEnvvars(serviceIP)
 	labels := plan.makePlanLabel()
 	affinity := prepareAffinity(plan.collectionID, sc.ExecutorConfig.NodeAffinity)
 	tolerations := prepareTolerations(sc.ExecutorConfig.Tolerations)
 	executorConfig := sc.ExecutorConfig.JmeterContainer.ExecutorContainer
 	t := true
-	volumes := []apiv1.Volume{}
-	volumeMounts := []apiv1.VolumeMount{}
-	if object_storage.IsProviderGCP(sc.ObjectStorage.Provider) {
-		volumeName := "shibuya-gcp-auth"
-		secretName := sc.ObjectStorage.SecretName
-		authFileName := sc.ObjectStorage.AuthFileName
-		mountPath := fmt.Sprintf("/auth/%s", authFileName)
-		v := apiv1.Volume{
-			Name: volumeName,
-			VolumeSource: apiv1.VolumeSource{
-				Secret: &apiv1.SecretVolumeSource{
-					SecretName: secretName,
-				},
-			},
-		}
-		volumes = append(volumes, v)
-		vm := apiv1.VolumeMount{
-			Name:      volumeName,
-			MountPath: mountPath,
-			SubPath:   authFileName,
-		}
-		volumeMounts = append(volumeMounts, vm)
-		envvar := apiv1.EnvVar{
-			Name:  "GOOGLE_APPLICATION_CREDENTIALS",
-			Value: mountPath,
-		}
-		envvars = append(envvars, envvar)
-	}
-	cmVolumeName := "shibuya-config"
-	cmName := sc.ObjectStorage.ConfigMapName
-	cmVolume := apiv1.Volume{
-		Name: cmVolumeName,
-		VolumeSource: apiv1.VolumeSource{
-			ConfigMap: &apiv1.ConfigMapVolumeSource{
-				LocalObjectReference: apiv1.LocalObjectReference{
-					Name: cmName,
-				},
-			},
-		},
-	}
-	volumes = append(volumes, cmVolume)
-	cmVolumeMounts := apiv1.VolumeMount{
-		Name:      cmVolumeName,
-		MountPath: config.ConfigFilePath,
-		SubPath:   config.ConfigFileName,
-	}
-	volumeMounts = append(volumeMounts, cmVolumeMounts)
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:                       planName,
@@ -101,7 +54,6 @@ func (plan planResource) makePlanDeployment(replicas int, sc config.ShibuyaConfi
 					},
 					TerminationGracePeriodSeconds: new(int64),
 					HostAliases:                   makeHostAliases(sc.ExecutorConfig.HostAliases),
-					Volumes:                       volumes,
 					Containers: []apiv1.Container{
 						{
 							Name:            planName,
@@ -125,7 +77,6 @@ func (plan planResource) makePlanDeployment(replicas int, sc config.ShibuyaConfi
 									ContainerPort: 8080,
 								},
 							},
-							VolumeMounts: volumeMounts,
 						},
 					},
 				},
@@ -163,6 +114,16 @@ func (plan planResource) makePlanService() *apiv1.Service {
 func (plan planResource) makeEngineName(engineID int) string {
 	return fmt.Sprintf("engine-%d-%d-%d-%d", plan.projectID, plan.collectionID, plan.planID, engineID)
 }
+
+// This func will be used by engine to determine the id
+func ExtractEngineIDFromName(engineName string) (int, error) {
+	t := strings.Split(engineName, "-")
+	if len(t) != 5 {
+		return 0, fmt.Errorf("invalid engine name %s", engineName)
+	}
+	return strconv.Atoi(t[4])
+}
+
 func (plan planResource) makeName() string {
 	return fmt.Sprintf("engine-%d-%d-%d", plan.projectID, plan.collectionID, plan.planID)
 }
@@ -176,7 +137,7 @@ func (plan planResource) makePlanLabel() map[string]string {
 	}
 }
 
-func (plan planResource) makeEngineMetaEnvvars() []apiv1.EnvVar {
+func (plan planResource) makeEngineMetaEnvvars(coordinatorIP string) []apiv1.EnvVar {
 	return []apiv1.EnvVar{
 		{
 			Name:  "collection_id",
@@ -185,6 +146,18 @@ func (plan planResource) makeEngineMetaEnvvars() []apiv1.EnvVar {
 		{
 			Name:  "plan_id",
 			Value: fmt.Sprintf("%d", plan.planID),
+		},
+		{
+			Name:  "coordinator_ip",
+			Value: coordinatorIP,
+		},
+		{
+			Name: "engine_name",
+			ValueFrom: &apiv1.EnvVarSource{
+				FieldRef: &apiv1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
 		},
 	}
 }

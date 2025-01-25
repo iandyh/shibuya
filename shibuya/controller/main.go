@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
+	cdrclient "github.com/rakutentech/shibuya/shibuya/coordinator/client"
 	"github.com/rakutentech/shibuya/shibuya/model"
+	"github.com/rakutentech/shibuya/shibuya/object_storage"
 	"github.com/rakutentech/shibuya/shibuya/scheduler"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 	"github.com/rakutentech/shibuya/shibuya/utils"
@@ -27,26 +29,32 @@ type Controller struct {
 	Scheduler              scheduler.EngineScheduler
 	clientStreamingWorkers int
 	sc                     config.ShibuyaConfig
+	cdrclient              *cdrclient.Client
+	storageClient          object_storage.StorageInterface
 }
 
 func NewController(sc config.ShibuyaConfig) *Controller {
 	pool := x509.NewCertPool()
 	pool.AddCert(sc.CAPair.Cert)
-	c := &Controller{
-		filePath: "/test-data",
-		httpClient: &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs: pool,
-				},
+	httpClient := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: pool,
 			},
 		},
+	}
+	c := &Controller{
+		filePath:               "/test-data",
+		httpClient:             httpClient,
 		ApiClosingClients:      make(chan *ApiMetricStream),
 		ApiNewClients:          make(chan *ApiMetricStream),
 		clientStreamingWorkers: 5,
 		sc:                     sc,
+		cdrclient:              cdrclient.NewClient(httpClient),
+		storageClient:          object_storage.CreateObjStorageClient(sc),
 	}
+
 	c.schedulerKind = sc.ExecutorConfig.Cluster.Kind
 	c.Scheduler = scheduler.NewEngineScheduler(sc)
 	return c
@@ -198,9 +206,7 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 	if err := collection.NewLaunchEntry(sid, c.sc.Context, int64(enginesCount), nodesCount, int64(vu)); err != nil {
 		return err
 	}
-	err = utils.Retry(func() error {
-		return c.Scheduler.ExposeProject(collection.ProjectID)
-	}, nil)
+	service, err := c.Scheduler.ExposeProject(collection.ProjectID)
 	if err != nil {
 		return err
 	}
@@ -208,6 +214,7 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 		log.Error(err)
 		return err
 	}
+	serviceIP := service.Spec.ClusterIP
 	// we will assume collection deployment will always be successful
 	// For some large deployments, it might take more than 1 min to finish, which could result 504 at gateway side
 	// So we do not wait for the deployment to be finished.
@@ -220,7 +227,7 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 				defer wg.Done()
 				pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
 				utils.Retry(func() error {
-					return pc.deploy()
+					return pc.deploy(serviceIP)
 				}, nil)
 			}(e)
 		}
@@ -232,14 +239,37 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 	return nil
 }
 
+// In this func, we firstly need to check whether the coordinator, scraper is deployed
+// Then we need to check
 func (c *Controller) CollectionStatus(collection *model.Collection) (*smodel.CollectionStatus, error) {
 	eps, err := collection.GetExecutionPlans()
 	if err != nil {
 		return nil, err
 	}
+	numberOfEngines := 0
+	for _, ep := range eps {
+		numberOfEngines += ep.Engines
+	}
 	cs, err := c.Scheduler.CollectionStatus(collection.ProjectID, collection.ID, eps)
 	if err != nil {
 		return nil, err
+	}
+	ingressIP, err := c.Scheduler.GetIngressUrl(collection.ProjectID)
+	if err != nil || ingressIP == "" {
+		return cs, nil
+	}
+	if err := c.cdrclient.Healthcheck(ingressIP, collection, numberOfEngines); err != nil {
+		return cs, nil
+	}
+	for _, ps := range cs.Plans {
+		// TODO! now, for simplicity, we combine the logic together.
+		ps.EnginesReachable = ps.Engines == ps.EnginesDeployed && cs.ScraperDeployed
+		rp, err := model.GetRunningPlan(collection.ID, ps.PlanID)
+		if err != nil {
+			continue
+		}
+		ps.StartedTime = rp.StartedTime
+		ps.InProgress = true
 	}
 	if c.sc.DevMode {
 		cs.PoolSize = 100

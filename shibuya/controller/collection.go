@@ -58,6 +58,7 @@ func (c *Controller) TermAndPurgeCollection(collection *model.Collection) (err e
 	if err = c.Scheduler.PurgeCollection(collection.ID); err != nil {
 		return err
 	}
+
 	return err
 }
 
@@ -85,39 +86,46 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 	if err != nil {
 		return err
 	}
-	errs := make(chan error, len(collection.ExecutionPlans))
-	defer close(errs)
+	planEngineDataConfigs := make(map[int64][]*enginesModel.EngineDataConfig, len(collection.ExecutionPlans))
+	plans := make([]*model.Plan, len(collection.ExecutionPlans))
 	for i, ep := range collection.ExecutionPlans {
-		go func(i int, ep *model.ExecutionPlan) {
-			// We wait for all the engines. Because we can only all the plan into running status
-			// When all the engines are triggered
-
-			pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
-			if err := pc.trigger(engineDataConfigs[i], runID); err != nil {
-				errs <- err
-				return
-			}
-			if err := model.AddRunningPlan(c.sc.Context, collection.ID, ep.PlanID); err != nil {
-				errs <- err
-				return
-			}
-			errs <- nil
-		}(i, ep)
+		pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
+		plan, err := model.GetPlan(ep.PlanID)
+		if err != nil {
+			return err
+		}
+		plan.TestFile.Content, err = c.storageClient.Download(plan.TestFile.Filepath)
+		if err != nil {
+			return err
+		}
+		planEngineDataConfig, err := pc.prepare(plan, engineDataConfigs[i], runID, c.storageClient)
+		if err != nil {
+			return err
+		}
+		plans[i] = plan
+		planEngineDataConfigs[ep.PlanID] = planEngineDataConfig
 	}
-	triggerErrors := []error{}
-	for i := 0; i < len(collection.ExecutionPlans); i++ {
-		if err := <-errs; err != nil {
-			triggerErrors = append(triggerErrors, err)
+	ingressIP, err := c.Scheduler.GetIngressUrl(collection.ProjectID)
+	if err != nil {
+		return err
+	}
+	for _, d := range collection.Data {
+		log.Infof("Downloading file %s", d.Filename)
+		content, err := c.storageClient.Download(d.Filepath)
+		if err != nil {
+			return fmt.Errorf("Could not download file %v, link %s", err, d.Filepath)
+		}
+		d.Content = content
+	}
+	if err := c.cdrclient.TriggerCollection(ingressIP, collection, planEngineDataConfigs, plans); err != nil {
+		return err
+	}
+	for _, ep := range collection.ExecutionPlans {
+		if err := model.AddRunningPlan(c.sc.Context, collection.ID, ep.PlanID); err != nil {
+			return err
 		}
 	}
 	collection.NewRun(runID)
-	if len(triggerErrors) == len(collection.ExecutionPlans) {
-		// every plan in collection has error
-		c.TermCollection(collection, true)
-	}
-	if len(triggerErrors) > 0 {
-		return fmt.Errorf("Triggering errors %v", triggerErrors)
-	}
 	return nil
 }
 
@@ -153,21 +161,19 @@ func (c *Controller) TermCollection(collection *model.Collection, force bool) (e
 	if err != nil {
 		return err
 	}
-	var wg sync.WaitGroup
-	for _, ep := range eps {
-		wg.Add(1)
-		go func(ep *model.ExecutionPlan) {
-			defer wg.Done()
-			pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc) // we don't need scheduler here
-			if err := pc.term(force); err != nil {
-				log.Error(err)
-				e = err
-			}
-			log.Printf("Plan %d is terminated.", ep.PlanID)
-		}(ep)
+	defer func() {
+		for _, ep := range eps {
+			model.DeleteRunningPlan(collection.ID, ep.PlanID)
+		}
+		collection.StopRun()
+		collection.RunFinish(currRunID)
+	}()
+	externalIP, err := c.Scheduler.GetIngressUrl(collection.ProjectID)
+	if err != nil {
+		return err
 	}
-	wg.Wait()
-	collection.StopRun()
-	collection.RunFinish(currRunID)
+	if err := c.cdrclient.TermCollection(externalIP, collection.ID, eps); err != nil {
+		return err
+	}
 	return e
 }

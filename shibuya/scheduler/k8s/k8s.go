@@ -72,9 +72,9 @@ func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
 	}
 }
 
-func (kcm *K8sClientManager) DeployPlan(projectID, collectionID, planID int64, enginesNo int, containerconfig *config.ExecutorContainer) error {
+func (kcm *K8sClientManager) DeployPlan(projectID, collectionID, planID int64, enginesNo int, serviceIP string, containerconfig *config.ExecutorContainer) error {
 	pr := planResource{projectID, collectionID, planID}
-	planSts := pr.makePlanDeployment(enginesNo, kcm.sc)
+	planSts := pr.makePlanDeployment(enginesNo, serviceIP, kcm.sc)
 	if _, err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Create(context.TODO(), planSts, metav1.CreateOptions{}); err != nil {
 		return err
 	}
@@ -87,6 +87,16 @@ func (kcm *K8sClientManager) DeployPlan(projectID, collectionID, planID int64, e
 		return err
 	}
 	return nil
+}
+
+func (kcm *K8sClientManager) GetServiceIP(projectID int64) (string, error) {
+	igName := projectResource(projectID).makeName()
+	service, err := kcm.client.CoreV1().Services(kcm.Namespace).
+		Get(context.TODO(), igName, metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return service.Spec.ClusterIP, nil
 }
 
 func (kcm *K8sClientManager) GetIngressUrl(projectID int64) (string, error) {
@@ -162,13 +172,11 @@ func (kcm *K8sClientManager) FetchEngineUrlsByPlan(collectionID, planID int64, o
 
 func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error) {
 	planStatuses := make(map[int64]*smodel.PlanStatus)
-	var engineReachable bool
 	cs := &smodel.CollectionStatus{}
 	pods, err := kcm.GetPodsByCollection(collectionID, "")
 	if err != nil {
 		return cs, err
 	}
-	ingressControllerDeployed := false
 	for _, ep := range eps {
 		ps := &smodel.PlanStatus{
 			PlanID:  ep.PlanID,
@@ -176,17 +184,10 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 		}
 		planStatuses[ep.PlanID] = ps
 	}
-	enginesReady := true
-	scraperDeployed := false
 	for _, pod := range pods {
-		if pod.Labels["kind"] == smodel.IngressController {
-			ingressControllerDeployed = true
-			continue
-		}
 		if pod.Labels["kind"] == smodel.Scraper {
 			if pod.Status.Phase == apiv1.PodRunning {
-				scraperDeployed = true
-				continue
+				cs.ScraperDeployed = true
 			}
 			continue
 		}
@@ -200,52 +201,14 @@ func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps
 			continue
 		}
 		ps.EnginesDeployed += 1
-		if pod.Status.Phase != apiv1.PodRunning {
-			enginesReady = false
-		}
 	}
-	// if it's unrechable, we can assume it's not in progress as well
-	fieldSelector := fmt.Sprintf("status.phase=Running")
-	ingressPods, err := kcm.GetPodsByCollection(collectionID, fieldSelector)
-	if err != nil {
-		return cs, err
-	}
-	ingressControllerDeployed = len(ingressPods) >= 1
-	if !ingressControllerDeployed || !enginesReady || !scraperDeployed {
-		for _, ps := range planStatuses {
-			cs.Plans = append(cs.Plans, ps)
-		}
-		return cs, nil
-	}
-	engineReachable = false
-	randomPlan := eps[0]
-	opts := &smodel.EngineOwnerRef{
-		ProjectID:    projectID,
-		EnginesCount: randomPlan.Engines,
-	}
-	engineUrls, err := kcm.FetchEngineUrlsByPlan(collectionID, randomPlan.PlanID, opts)
-	if err == nil {
-		randomEngine := engineUrls[0]
-		engineReachable = kcm.ServiceReachable(randomEngine)
-	}
-	jobs := make(chan *smodel.PlanStatus)
-	result := make(chan *smodel.PlanStatus)
-	for w := 0; w < len(eps); w++ {
-		go smodel.GetPlanStatus(collectionID, jobs, result)
-	}
+	cs.Plans = make([]*smodel.PlanStatus, len(planStatuses))
+	n := 0
 	for _, ps := range planStatuses {
-		jobs <- ps
+		cs.Plans[n] = ps
+		n += 1
 	}
-	defer close(jobs)
-	defer close(result)
-	for range eps {
-		ps := <-result
-		if ps.Engines == ps.EnginesDeployed && engineReachable {
-			ps.EnginesReachable = true
-		}
-		cs.Plans = append(cs.Plans, ps)
-	}
-	return cs, nil
+	return cs, err
 }
 
 func (kcm *K8sClientManager) GetPodsByCollectionPlan(collectionID, planID int64) ([]apiv1.Pod, error) {
@@ -395,17 +358,18 @@ func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
 	return nil
 }
 
-func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
+func (kcm *K8sClientManager) ExposeProject(projectID int64) (*apiv1.Service, error) {
 	prj := projectResource(projectID)
 	service := prj.makeIngressService(kcm.sc.ExecutorConfig.Cluster.ServiceType)
 	// We firstly need to expose the project because we need to the external
 	// IP for the certs
 	serviceClient := kcm.client.CoreV1().Services(kcm.Namespace)
-	if _, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{}); err != nil {
+	createdService, err := serviceClient.Create(context.TODO(), service, metav1.CreateOptions{})
+	if err != nil {
 		if errors.IsAlreadyExists(err) {
-			return nil
+			return serviceClient.Get(context.TODO(), prj.makeName(), metav1.GetOptions{})
 		}
-		return err
+		return nil, err
 	}
 	go func() {
 		waitDuration := time.Duration(10 * time.Minute)
@@ -451,7 +415,7 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) error {
 			}
 		}
 	}()
-	return nil
+	return createdService, nil
 }
 
 func (kcm *K8sClientManager) GetDeployedCollections() (map[int64]time.Time, error) {

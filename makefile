@@ -34,6 +34,10 @@ grafana: grafana/
 	kind load docker-image metrics-dashboard:local --name shibuya
 	helm upgrade --install metrics-dashboard grafana/metrics-dashboard
 
+.PHONY: base_image
+base_image:
+	cd shibuya && docker build -f Dockerfile.base -t shibuya:base .
+
 .PHONY: local_api
 local_api:
 	cd shibuya && sh build.sh api
@@ -47,7 +51,7 @@ local_controller:
 	kind load docker-image controller:local --name shibuya
 
 .PHONY: shibuya
-shibuya: local_api local_controller grafana
+shibuya: base_image local_api local_controller grafana
 	helm uninstall shibuya || true
 	cd shibuya && sh gen_coordinator_ca.sh $(shibuya-controller-ns)
 	cd shibuya && helm upgrade --install shibuya install/shibuya
@@ -100,12 +104,12 @@ local_storage:
 	kind load docker-image shibuya:storage --name shibuya
 	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/storage.yaml --force
 
-.PHONY: local_coordinator
-local_coordinator:
+.PHONY:local_coordinator
+local_coordinator: base_image
 	# if you need to debug the controller, please use the makefile in the ingress controller folder
 	# And update the image in the config.json
 	cd shibuya && sh build.sh coordinator
-	docker build -f shibuya/Dockerfile --build-arg binary_name=shibuya-coordinator -t coordinator:local shibuya
+	docker build -f shibuya/coordinator/Dockerfile --build-arg binary_name=shibuya-coordinator -t coordinator:local shibuya
 	kind load docker-image coordinator:local --name shibuya
 
 .PHONY: modeltests

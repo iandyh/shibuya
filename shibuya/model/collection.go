@@ -21,6 +21,7 @@ type ShibuyaFile struct {
 	Filelink     string `json:"filelink"` // Full url for users to download the file - storage.com/shibuya/plan/22/a.txt
 	TotalSplits  int    `json:"total_splits"`
 	CurrentSplit int    `json:"current_split"`
+	Content      []byte `json:"-"` // Content of the file. This is only fetched when we trigger the collection
 }
 
 type Collection struct {

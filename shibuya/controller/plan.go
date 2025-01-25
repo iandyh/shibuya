@@ -1,17 +1,16 @@
 package controller
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
+	cdrclient "github.com/rakutentech/shibuya/shibuya/coordinator/client"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
 	"github.com/rakutentech/shibuya/shibuya/model"
+	"github.com/rakutentech/shibuya/shibuya/object_storage"
 	"github.com/rakutentech/shibuya/shibuya/scheduler"
-	serrors "github.com/rakutentech/shibuya/shibuya/scheduler/errors"
 	_ "github.com/rakutentech/shibuya/shibuya/utils"
 	log "github.com/sirupsen/logrus"
 )
@@ -34,20 +33,27 @@ func NewPlanController(ep *model.ExecutionPlan, collection *model.Collection, sc
 	}
 }
 
-func (pc *PlanController) deploy() error {
+func (pc *PlanController) deploy(serviceIP string) error {
 	engineConfig := findEngineConfig(JmeterEngineType, pc.sc)
 	if err := pc.scheduler.DeployPlan(pc.collection.ProjectID, pc.collection.ID, pc.ep.PlanID,
-		pc.ep.Engines, engineConfig); err != nil {
+		pc.ep.Engines, serviceIP, engineConfig); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pc *PlanController) prepare(plan *model.Plan, edc *enginesModel.EngineDataConfig, runID int64) []*enginesModel.EngineDataConfig {
+func (pc *PlanController) prepare(plan *model.Plan, edc *enginesModel.EngineDataConfig, runID int64, storageClient object_storage.StorageInterface) ([]*enginesModel.EngineDataConfig, error) {
 	edc.Duration = strconv.Itoa(pc.ep.Duration)
 	edc.Concurrency = strconv.Itoa(pc.ep.Concurrency)
 	edc.Rampup = strconv.Itoa(pc.ep.Rampup)
 	engineDataConfigs := edc.DeepCopies(pc.ep.Engines)
+	var err error
+	for _, pf := range plan.Data {
+		pf.Content, err = storageClient.Download(pf.Filepath)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for i := 0; i < pc.ep.Engines; i++ {
 		// we split the data inherited from collection if the plan specifies split too
 		if pc.ep.CSVSplit {
@@ -75,42 +81,7 @@ func (pc *PlanController) prepare(plan *model.Plan, edc *enginesModel.EngineData
 			engineDataConfigs[i].EngineData[d.Filename] = &sf
 		}
 	}
-	return engineDataConfigs
-}
-
-func (pc *PlanController) trigger(engineDataConfig *enginesModel.EngineDataConfig, runID int64) error {
-	plan, err := model.GetPlan(pc.ep.PlanID)
-	if err != nil {
-		return err
-	}
-	engineDataConfigs := pc.prepare(plan, engineDataConfig, runID)
-	engines, err := generateEnginesWithUrl(pc.ep.Engines, pc.ep.PlanID, pc.collection.ID, pc.collection.ProjectID,
-		JmeterEngineType, pc.scheduler, pc.httpClient)
-	if err != nil {
-		return err
-	}
-	errs := make(chan error, len(engines))
-	defer close(errs)
-	planErrors := []error{}
-	for i, engine := range engines {
-		go func(engine shibuyaEngine, i int) {
-			if err := engine.trigger(engineDataConfigs[i]); err != nil {
-				errs <- err
-				return
-			}
-			errs <- nil
-		}(engine, i)
-	}
-	for i := 0; i < len(engines); i++ {
-		if err := <-errs; err != nil {
-			planErrors = append(planErrors, err)
-		}
-	}
-	if len(planErrors) > 0 {
-		return fmt.Errorf("Trigger plan errors:%v", planErrors)
-	}
-	log.Printf("Triggering for plan %d is finished", pc.ep.PlanID)
-	return nil
+	return engineDataConfigs, nil
 }
 
 func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
@@ -148,45 +119,23 @@ func (pc *PlanController) UnSubscribe() {
 
 }
 
-// TODO. we can use the cached clients here.
-func (pc *PlanController) progress() bool {
-	r := true
-	ep := pc.ep
-	collection := pc.collection
-	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
-		JmeterEngineType, pc.scheduler, pc.httpClient)
-	if errors.Is(err, serrors.IngressError) {
-		log.Error(err)
+func (pc *PlanController) progress(cdrclient *cdrclient.Client, externalIP string) bool {
+	if err := cdrclient.ProgressCheck(externalIP, pc.collection.ID, pc.ep.PlanID); err == nil {
 		return true
-	} else if err != nil {
-		return false
 	}
-	for _, engine := range engines {
-		engineRunning := engine.progress()
-		r = r && !engineRunning
-	}
-	return !r
+	return false
 }
 
-func (pc *PlanController) term(force bool) error {
-	var wg sync.WaitGroup
+// TODO: what was the past around force?
+func (pc *PlanController) term(cdrclient *cdrclient.Client) error {
 	ep := pc.ep
-	collection := pc.collection
-	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
-		JmeterEngineType, pc.scheduler, pc.httpClient)
+	ingressIP, err := pc.scheduler.GetIngressUrl(pc.collection.ProjectID)
 	if err != nil {
 		return err
 	}
-	for _, engine := range engines {
-		wg.Add(1)
-		go func(e shibuyaEngine) {
-			defer wg.Done()
-			if err := e.terminate(force); err != nil {
-				log.Error(err)
-			}
-		}(engine)
+	if err := cdrclient.TermPlan(ingressIP, pc.collection.ID, pc.ep.PlanID); err != nil {
+		return err
 	}
-	wg.Wait()
 	model.DeleteRunningPlan(pc.collection.ID, ep.PlanID)
 	return nil
 }

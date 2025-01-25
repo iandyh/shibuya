@@ -16,11 +16,16 @@ func (c *Controller) CheckRunningThenTerminate() {
 		jobLoop:
 			for j := range jobs {
 				pc := NewPlanController(j.ep, j.collection, c.Scheduler, c.httpClient, c.sc)
-				if running := pc.progress(); !running {
+				externalIP, err := c.Scheduler.GetIngressUrl(j.collection.ProjectID)
+				if err != nil {
+					continue jobLoop
+				}
+				log.Infof("Handling for plan %d", j.ep.PlanID)
+				if running := pc.progress(c.cdrclient, externalIP); !running {
 					collection := j.collection
 					currRunID, err := collection.GetCurrentRun()
 					if currRunID != int64(0) {
-						pc.term(false)
+						pc.term(c.cdrclient)
 						log.Printf("Plan %d is terminated.", j.ep.PlanID)
 					}
 					if err != nil {

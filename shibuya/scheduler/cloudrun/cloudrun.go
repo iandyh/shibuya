@@ -187,7 +187,7 @@ func (cr *CloudRun) DeployEngine(projectID, collectionID, planID int64, engineID
 	return nil
 }
 
-func (cr *CloudRun) DeployPlan(projectID, collectionID, planID int64, replicas int, containerConfig *config.ExecutorContainer) error {
+func (cr *CloudRun) DeployPlan(projectID, collectionID, planID int64, replicas int, serviceIP string, containerConfig *config.ExecutorContainer) error {
 	return nil
 }
 
@@ -354,8 +354,8 @@ func (cr *CloudRun) GetCollectionEnginesDetail(projectID, collectionID int64) (*
 	return nil, nil
 }
 
-func (cr *CloudRun) ExposeProject(projectID int64) error {
-	return nil
+func (cr *CloudRun) ExposeProject(projectID int64) (*apiv1.Service, error) {
+	return nil, nil
 }
 
 func (cr *CloudRun) PurgeProjectIngress(projectID int64) error {
@@ -390,6 +390,10 @@ func (cr *CloudRun) DownloadPodLog(collectionID, planID int64) (string, error) {
 	defer resp.Body.Close()
 	r, _ := ioutil.ReadAll(resp.Body)
 	return string(r), nil
+}
+
+func (cr *CloudRun) GetIngressUrl(projectID int64) (string, error) {
+	return "", nil
 }
 
 func makeCollectionLabel(collectionID int64) string {

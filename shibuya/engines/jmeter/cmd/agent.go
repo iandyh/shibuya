@@ -2,8 +2,7 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
-	"errors"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -18,17 +17,18 @@ import (
 	"sync"
 	"time"
 
-	etree "github.com/beevik/etree"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	_ "go.uber.org/automaxprocs"
 
-	"github.com/rakutentech/shibuya/shibuya/config"
-	sos "github.com/rakutentech/shibuya/shibuya/object_storage"
+	cdrclient "github.com/rakutentech/shibuya/shibuya/coordinator/client"
+	payload "github.com/rakutentech/shibuya/shibuya/coordinator/payload"
+	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
+	"github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 
 	"github.com/rakutentech/shibuya/shibuya/engines/containerstats"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
-	"github.com/rakutentech/shibuya/shibuya/model"
-	"github.com/rakutentech/shibuya/shibuya/utils"
+	"github.com/reqfleet/pubsub/client"
+	"github.com/reqfleet/pubsub/messages"
 
 	"github.com/hpcloud/tail"
 )
@@ -62,33 +62,44 @@ type ShibuyaWrapper struct {
 	pidLock        sync.RWMutex
 	handlerLock    sync.RWMutex
 	currentPid     int
-	storageClient  sos.StorageInterface
 	//stderr         io.ReadCloser
-	reader       io.ReadCloser
-	writer       io.Writer
-	buffer       []byte
-	runID        int
-	collectionID string
-	planID       string
-	engineID     int
+	reader        io.ReadCloser
+	writer        io.Writer
+	buffer        []byte
+	runID         int
+	collectionID  string
+	planID        string
+	engineID      int
+	coordinatorIP string
+	cdrclient     *cdrclient.Client
 }
 
 func findCollectionIDPlanID() (string, string) {
 	return os.Getenv("collection_id"), os.Getenv("plan_id")
 }
 
-func NewServer(sc config.ShibuyaConfig) (sw *ShibuyaWrapper) {
+func NewServer(coordinatorIP, engineName string) (sw *ShibuyaWrapper) {
 	// Instantiate a broker
 	sw = &ShibuyaWrapper{
+		coordinatorIP:  coordinatorIP,
 		newClients:     make(chan chan string),
 		closingClients: make(chan chan string),
 		clients:        make(map[chan string]bool),
 		closeSignal:    make(chan int),
 		logCounter:     0,
 		Bus:            make(chan string),
-		httpClient:     &http.Client{},
-		storageClient:  sos.CreateObjStorageClient(sc),
+		httpClient: &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			},
+		},
 	}
+	sw.cdrclient = cdrclient.NewClient(sw.httpClient)
+	engineID, err := k8s.ExtractEngineIDFromName(engineName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	sw.engineID = engineID
 	sw.collectionID, sw.planID = findCollectionIDPlanID()
 	reader, writer, _ := os.Pipe()
 	mw := io.MultiWriter(writer, os.Stderr)
@@ -243,31 +254,6 @@ func (sw *ShibuyaWrapper) streamHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (sw *ShibuyaWrapper) stopHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		return
-	}
-	err := r.ParseForm()
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	pid := sw.getPid()
-	if pid == 0 {
-		return
-	}
-	log.Printf("shibuya-agent: Shutting down Jmeter process %d", sw.getPid())
-	cmd := exec.Command(JMETER_SHUTDOWN)
-	cmd.Run()
-	for {
-		if sw.getPid() == 0 {
-			break
-		}
-		time.Sleep(time.Second * 2)
-	}
-	sw.closeSignal <- 1
-}
-
 func (sw *ShibuyaWrapper) setPid(pid int) {
 	sw.pidLock.Lock()
 	defer sw.pidLock.Unlock()
@@ -299,6 +285,7 @@ func (sw *ShibuyaWrapper) runCommand() int {
 		cmd.Wait()
 		log.Printf("shibuya-agent: Shutdown is finished, resetting pid to zero")
 		sw.setPid(0)
+		sw.cdrclient.ReportProgress(sw.coordinatorIP, sw.collectionID, sw.planID, sw.engineID, false)
 	}()
 	return pid
 }
@@ -319,185 +306,60 @@ func cleanTestData() error {
 
 func saveToDisk(filename string, file []byte) error {
 	filePath := filepath.Join(TEST_DATA_FOLDER, filepath.Base(filename))
-	log.Println(filePath)
 	if err := ioutil.WriteFile(filePath, file, 0777); err != nil {
 		return err
 	}
 	return nil
 }
 
-func GetThreadGroups(planDoc *etree.Document) ([]*etree.Element, error) {
-	jtp := planDoc.SelectElement("jmeterTestPlan")
-	if jtp == nil {
-		return nil, errors.New("Missing Jmeter Test plan in jmx")
-	}
-	ht := jtp.SelectElement("hashTree")
-	if ht == nil {
-		return nil, errors.New("Missing hash tree inside Jmeter test plan in jmx")
-	}
-	ht = ht.SelectElement("hashTree")
-	if ht == nil {
-		return nil, errors.New("Missing hash tree inside hash tree in jmx")
-	}
-	tgs := ht.SelectElements("ThreadGroup")
-	stgs := ht.SelectElements("SetupThreadGroup")
-	tgs = append(tgs, stgs...)
-	return tgs, nil
-}
-
-func parseTestPlan(file []byte) (*etree.Document, error) {
-	doc := etree.NewDocument()
-	if err := doc.ReadFromBytes(file); err != nil {
-		return nil, err
-	}
-	return doc, nil
-}
-
-func modifyJMX(file []byte, threads, duration, rampTime string) ([]byte, error) {
-	planDoc, err := parseTestPlan(file)
-	if err != nil {
-		return nil, err
-	}
-	durationInt, err := strconv.Atoi(duration)
-	if err != nil {
-		return nil, err
-	}
-	// it includes threadgroups and setupthreadgroups
-	threadGroups, err := GetThreadGroups(planDoc)
-	if err != nil {
-		return nil, err
-	}
-	for _, tg := range threadGroups {
-		children := tg.ChildElements()
-		for _, child := range children {
-			attrName := child.SelectAttrValue("name", "")
-			switch attrName {
-			case "ThreadGroup.duration":
-				child.SetText(strconv.Itoa(durationInt * 60))
-			case "ThreadGroup.scheduler":
-				child.SetText("true")
-			case "ThreadGroup.num_threads":
-				child.SetText(threads)
-			case "ThreadGroup.ramp_time":
-				child.SetText(rampTime)
-			}
-		}
-	}
-	return planDoc.WriteToBytes()
-}
-
-func (sw *ShibuyaWrapper) prepareJMX(sf *model.ShibuyaFile, threads, duration, rampTime string) error {
-	file, err := sw.storageClient.Download(sf.Filepath)
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-	modified, err := modifyJMX(file, threads, duration, rampTime)
-	if err != nil {
-		return err
-	}
-	return saveToDisk(JMX_FILENAME, modified)
-}
-
-func (sw *ShibuyaWrapper) prepareCSV(sf *model.ShibuyaFile) error {
-	file, err := sw.storageClient.Download(sf.Filepath)
-	if err != nil {
-		return err
-	}
-	splittedCSV, err := utils.SplitCSV(file, sf.TotalSplits, sf.CurrentSplit)
-	if err != nil {
-		return err
-	}
-	return saveToDisk(sf.Filename, splittedCSV)
-}
-
-func (sw *ShibuyaWrapper) downloadAndSaveFile(sf *model.ShibuyaFile) error {
-	file, err := sw.storageClient.Download(sf.Filepath)
-	if err != nil {
-		return err
-	}
-	return saveToDisk(sf.Filename, file)
-}
-
-func (sw *ShibuyaWrapper) prepareTestData(edc enginesModel.EngineDataConfig) error {
-	for _, sf := range edc.EngineData {
-		fileType := filepath.Ext(sf.Filename)
-		switch fileType {
-		case ".jmx":
-			if err := sw.prepareJMX(sf, edc.Concurrency, edc.Duration, edc.Rampup); err != nil {
-				return err
-			}
-		case ".csv":
-			if err := sw.prepareCSV(sf); err != nil {
-				return err
-			}
-		default:
-			if err := sw.downloadAndSaveFile(sf); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (sw *ShibuyaWrapper) startHandler(w http.ResponseWriter, r *http.Request) {
-	sw.handlerLock.Lock()
-	defer sw.handlerLock.Unlock()
-
-	if r.Method == "POST" {
-		if sw.getPid() != 0 {
-			w.WriteHeader(http.StatusConflict)
-			return
-		}
-		file, err := ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		defer r.Body.Close()
-		var edc enginesModel.EngineDataConfig
-		if err := json.Unmarshal(file, &edc); err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if err := cleanTestData(); err != nil {
-			log.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if err := sw.prepareTestData(edc); err != nil {
-			if errors.Is(err, sos.FileNotFoundError()) {
-				w.WriteHeader(http.StatusNotFound)
-				return
-			}
-			log.Println(err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		sw.runID = int(edc.RunID)
-		sw.engineID = edc.EngineID
-		pid := sw.runCommand()
-		go sw.tailJemeter()
-		log.Printf("shibuya-agent: Start running Jmeter process with pid: %d", pid)
-		w.Write([]byte(strconv.Itoa(pid)))
-		return
-	}
-	w.Write([]byte("hmm"))
-}
-
-func (sw *ShibuyaWrapper) progressHandler(w http.ResponseWriter, r *http.Request) {
-	pid := sw.getPid()
-	if pid == 0 {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
 func (sw *ShibuyaWrapper) stdoutHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(sw.buffer)
+}
+
+func (sw *ShibuyaWrapper) handleStart(planID string, payload *payload.EngineMessage) {
+	cleanTestData()
+	pf := storage.NewPlanFiles("", sw.collectionID, sw.planID)
+	client := sw.cdrclient
+	content, err := client.FetchFile(sw.coordinatorIP, pf.TestFilePath(payload.TestFile))
+	if err != nil {
+		return
+	}
+	if err := saveToDisk(JMX_FILEPATH, content); err != nil {
+		return
+	}
+	for dt := range payload.DataFiles {
+		content, err := client.FetchFile(sw.coordinatorIP, pf.EngineDataPath(dt, sw.engineID))
+		if err != nil {
+			return
+		}
+		if err := saveToDisk(dt, content); err != nil {
+			log.Println(err)
+		}
+	}
+	if pid := sw.runCommand(); pid != 0 {
+		if err := client.ReportProgress(sw.coordinatorIP, sw.collectionID, planID, sw.engineID, true); err != nil {
+			log.Println(err)
+		}
+		go sw.tailJemeter()
+	}
+}
+
+func (sw *ShibuyaWrapper) handleStop() {
+	log.Println("Shutting down jmeter")
+	pid := sw.getPid()
+	if pid == 0 {
+		return
+	}
+	log.Printf("shibuya-agent: Shutting down Jmeter process %d", sw.getPid())
+	cmd := exec.Command(JMETER_SHUTDOWN)
+	cmd.Run()
+	for {
+		if sw.getPid() == 0 {
+			break
+		}
+		time.Sleep(time.Second * 2)
+	}
+	sw.closeSignal <- 1
 }
 
 // This func reports the cpu/memory usage of the engine
@@ -529,8 +391,7 @@ func (sw *ShibuyaWrapper) reportOwnMetrics(interval time.Duration) error {
 }
 
 func main() {
-	sc := config.LoadConfig()
-	sw := NewServer(sc)
+	sw := NewServer(os.Getenv("coordinator_ip"), os.Getenv("engine_name"))
 	go func() {
 		if err := sw.reportOwnMetrics(5 * time.Second); err != nil {
 			// if the engine is having issues with reading stats from cgroup
@@ -539,10 +400,36 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
-	http.HandleFunc("/start", sw.startHandler)
-	http.HandleFunc("/stop", sw.stopHandler)
+
+	log.Println("Coordinator ip: ", sw.coordinatorIP)
+	client := &client.PubSubClient{Addr: fmt.Sprintf("%s:2416", sw.coordinatorIP)}
+	var msgChan chan messages.Message
+	var err error
+	for {
+		time.Sleep(2 * time.Second)
+		msgChan, _, err = client.Subscribe(fmt.Sprintf("collection:%s", sw.collectionID), &payload.Payload{})
+		if err != nil {
+			continue
+		}
+		break
+	}
+	go func() {
+		for msg := range msgChan {
+			pl := msg.(*payload.Payload)
+			planMsg := pl.PlanMessage[sw.planID]
+			switch pl.Verb {
+			case "start":
+				sw.handleStart(sw.planID, planMsg)
+			case "stop":
+				_, ok := pl.PlanMessage[sw.planID]
+				if !ok {
+					continue
+				}
+				sw.handleStop()
+			}
+		}
+	}()
 	http.HandleFunc("/stream", sw.streamHandler)
-	http.HandleFunc("/progress", sw.progressHandler)
 	http.HandleFunc("/output", sw.stdoutHandler)
 	http.HandleFunc("/metrics", promhttp.Handler().ServeHTTP)
 	log.Fatal(http.ListenAndServe(":8080", nil))

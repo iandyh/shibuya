@@ -42,8 +42,14 @@ func (p projectResource) makeIngressService(serviceType string) *apiv1.Service {
 			Selector: labels,
 			Ports: []apiv1.ServicePort{
 				{
+					Name:       "http",
 					Port:       443,
 					TargetPort: intstr.FromString("http"),
+				},
+				{
+					Name:       "pubsub",
+					Port:       2416,
+					TargetPort: intstr.FromInt(2416),
 				},
 			},
 		},
