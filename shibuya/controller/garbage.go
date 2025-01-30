@@ -9,6 +9,13 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// This is used for tracking all the running plans
+// So even when Shibuya controller restarts, the tests can resume
+type RunningPlan struct {
+	ep         *model.ExecutionPlan
+	collection *model.Collection
+}
+
 func (c *Controller) CheckRunningThenTerminate() {
 	jobs := make(chan *RunningPlan)
 	for w := 1; w <= 3; w++ {
