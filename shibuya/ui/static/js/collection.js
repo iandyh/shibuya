@@ -338,7 +338,6 @@ var Collection = Vue.component("collection", {
         runGrafanaUrl: function (run) {
             //buffer 1 minute before and after because of time lag in shipping of results
             var start = new Date(run.started_time);
-            start.setMinutes(start.getMinutes() - 1);
             var end = new Date(run.end_time);
             if (end.getTime() <= 0) {
                 return result_dashboard + "?var-runID=" + run.id + "&from=" + start.getTime() + "&to=now" + "&refresh=3s";
