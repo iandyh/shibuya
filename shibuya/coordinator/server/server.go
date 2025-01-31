@@ -83,7 +83,11 @@ func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 	if err != nil {
 		log.Fatal(err)
 	}
-	pub := pubsub.NewPubSubServer(pubsub.TCP)
+	serverOpts := pubsub.ServerOpts{
+		Mode:     pubsub.TCP,
+		Password: cc.APIKey,
+	}
+	pub := pubsub.NewPubSubServer(serverOpts)
 	go pub.Listen()
 
 	s := &ShibuyaCoordinator{inventory: inventory}

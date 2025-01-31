@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/common v0.34.0
 	github.com/prometheus/prometheus v0.35.0
-	github.com/reqfleet/pubsub v0.0.0-20250130011042-b92ea3648e8e
+	github.com/reqfleet/pubsub v0.0.0-20250131062938-7e7da3a9075b
 	github.com/sirupsen/logrus v1.8.1
 	github.com/stretchr/testify v1.9.0
 	go.uber.org/automaxprocs v1.5.1

@@ -407,7 +407,7 @@ func main() {
 	}()
 
 	log.Println("Coordinator ip: ", sw.coordinatorIP)
-	client := &client.PubSubClient{Addr: fmt.Sprintf("%s:2416", sw.coordinatorIP)}
+	client := &client.PubSubClient{Addr: fmt.Sprintf("%s:2416", sw.coordinatorIP), Password: sw.reqOpts.APIKey}
 	var msgChan chan messages.Message
 	var err error
 	for {

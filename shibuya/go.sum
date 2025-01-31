@@ -969,6 +969,8 @@ github.com/reqfleet/pubsub v0.0.0-20250130010557-cdf004098f6e h1:O32Jbvw+cVFY8Rd
 github.com/reqfleet/pubsub v0.0.0-20250130010557-cdf004098f6e/go.mod h1:aHb0rcy4GuqUwWB1CQk0ajYZCJhvu1dmsM/fZ7PIEBQ=
 github.com/reqfleet/pubsub v0.0.0-20250130011042-b92ea3648e8e h1:R2vTSfXaShQ8kDOBNVhpXHxvDpUTGRtrp6fcxOq+VO8=
 github.com/reqfleet/pubsub v0.0.0-20250130011042-b92ea3648e8e/go.mod h1:aHb0rcy4GuqUwWB1CQk0ajYZCJhvu1dmsM/fZ7PIEBQ=
+github.com/reqfleet/pubsub v0.0.0-20250131062938-7e7da3a9075b h1:8X2cuLaV93Hr2pW5xJDD0J+H6mOygwwWnyapDf3is9M=
+github.com/reqfleet/pubsub v0.0.0-20250131062938-7e7da3a9075b/go.mod h1:aHb0rcy4GuqUwWB1CQk0ajYZCJhvu1dmsM/fZ7PIEBQ=
 github.com/rogpeppe/fastuuid v0.0.0-20150106093220-6724a57986af/go.mod h1:XWv6SoW27p1b0cqNHllgS5HIMJraePCO15w5zCzIWYg=
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.1.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
