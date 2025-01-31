@@ -16,7 +16,7 @@ import (
 )
 
 type shibuyaEngine interface {
-	subscribe(runID int64) error
+	subscribe(runID int64, apiKey string) error
 	readMetrics() chan *shibuyaMetric
 	closeStream()
 	updateEngineUrl(url string)
@@ -65,7 +65,7 @@ func (be *baseEngine) makeBaseUrl() string {
 	return "https://" + base
 }
 
-func (be *baseEngine) subscribe(runID int64) error {
+func (be *baseEngine) subscribe(runID int64, apiKey string) error {
 	base := be.makeBaseUrl()
 	streamUrl := fmt.Sprintf(base, be.engineUrl, "stream")
 	req, err := http.NewRequest("GET", streamUrl, nil)
@@ -78,6 +78,7 @@ func (be *baseEngine) subscribe(runID int64) error {
 	httpClient := &http.Client{
 		Transport: be.httpClient.Transport,
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", apiKey))
 	stream, err := es.SubscribeWith("", httpClient, req)
 	if err != nil {
 		cancel()

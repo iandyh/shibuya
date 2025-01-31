@@ -138,6 +138,7 @@ func (plan planResource) makePlanLabel() map[string]string {
 }
 
 func (plan planResource) makeEngineMetaEnvvars(coordinatorIP string) []apiv1.EnvVar {
+	secretName := projectResource(plan.projectID).makeAPIKeySecretName()
 	return []apiv1.EnvVar{
 		{
 			Name:  "collection_id",
@@ -156,6 +157,17 @@ func (plan planResource) makeEngineMetaEnvvars(coordinatorIP string) []apiv1.Env
 			ValueFrom: &apiv1.EnvVarSource{
 				FieldRef: &apiv1.ObjectFieldSelector{
 					FieldPath: "metadata.name",
+				},
+			},
+		},
+		{
+			Name: "api_key",
+			ValueFrom: &apiv1.EnvVarSource{
+				SecretKeyRef: &apiv1.SecretKeySelector{
+					LocalObjectReference: apiv1.LocalObjectReference{
+						Name: secretName,
+					},
+					Key: "api_key",
 				},
 			},
 		},

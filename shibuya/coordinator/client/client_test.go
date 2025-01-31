@@ -19,9 +19,14 @@ func TestClient(t *testing.T) {
 		ProjectID: projectID,
 	}
 	s := cdrserver.NewShibuyaCoordinator(cc)
-	server := httptest.NewServer(s.Mux)
+	server := httptest.NewServer(s.Handler)
 	endpoint := server.URL
+	ro := cdrclient.ReqOpts{
+		Endpoint: endpoint,
+		APIKey:   "key", // TODO: fix the key here
+	}
 	client := cdrclient.NewClient(&http.Client{Timeout: 5 * time.Second})
-	err := client.ProgressCheck(endpoint, 1, 1)
+	err := client.ProgressCheck(ro, 1, 1)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
 }

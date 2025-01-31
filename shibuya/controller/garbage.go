@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	cdrclient "github.com/rakutentech/shibuya/shibuya/coordinator/client"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	log "github.com/sirupsen/logrus"
 )
@@ -27,12 +28,19 @@ func (c *Controller) CheckRunningThenTerminate() {
 				if err != nil {
 					continue jobLoop
 				}
-				log.Infof("Handling for plan %d", j.ep.PlanID)
-				if running := pc.progress(c.cdrclient, externalIP); !running {
+				apiKey, err := c.Scheduler.GetProjectAPIKey(j.collection.ProjectID)
+				if err != nil {
+					continue jobLoop
+				}
+				ro := cdrclient.ReqOpts{
+					Endpoint: externalIP,
+					APIKey:   apiKey,
+				}
+				if running := pc.progress(c.cdrclient, ro); !running {
 					collection := j.collection
 					currRunID, err := collection.GetCurrentRun()
 					if currRunID != int64(0) {
-						pc.term(c.cdrclient)
+						pc.term(c.cdrclient, ro)
 						log.Printf("Plan %d is terminated.", j.ep.PlanID)
 					}
 					if err != nil {

@@ -14,6 +14,7 @@ func initFromEnv() cdrserver.CoordinatorConfig {
 	projectID := os.Getenv("project_id")
 	logLevel := os.Getenv("log_level")
 	listenAddr := os.Getenv("listen_addr")
+	APIKey := os.Getenv("api_key")
 	return cdrserver.CoordinatorConfig{
 		Namespace:  namespace,
 		ProjectID:  projectID,
@@ -21,6 +22,7 @@ func initFromEnv() cdrserver.CoordinatorConfig {
 		ListenAddr: listenAddr,
 		InCluster:  true,
 		EnableTLS:  true,
+		APIKey:     APIKey,
 	}
 }
 

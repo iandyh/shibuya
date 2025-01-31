@@ -28,6 +28,7 @@ type EngineScheduler interface {
 	PurgeProjectIngress(projectID int64) error
 	GetEnginesByProject(projectID int64) ([]apiv1.Pod, error)
 	GetIngressUrl(projectID int64) (string, error)
+	GetProjectAPIKey(projectID int64) (string, error)
 }
 
 var FeatureUnavailable = errors.New("Feature unavailable")

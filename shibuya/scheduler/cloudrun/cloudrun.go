@@ -396,6 +396,10 @@ func (cr *CloudRun) GetIngressUrl(projectID int64) (string, error) {
 	return "", nil
 }
 
+func (cr *CloudRun) GetProjectAPIKey(projectID int64) (string, error) {
+	return "", nil
+}
+
 func makeCollectionLabel(collectionID int64) string {
 	return fmt.Sprintf("collection=%d", collectionID)
 }

@@ -72,6 +72,7 @@ type ShibuyaWrapper struct {
 	engineID      int
 	coordinatorIP string
 	cdrclient     *cdrclient.Client
+	reqOpts       cdrclient.ReqOpts
 }
 
 func findCollectionIDPlanID() (string, string) {
@@ -101,6 +102,10 @@ func NewServer(coordinatorIP, engineName string) (sw *ShibuyaWrapper) {
 	}
 	sw.engineID = engineID
 	sw.collectionID, sw.planID = findCollectionIDPlanID()
+	sw.reqOpts = cdrclient.ReqOpts{
+		Endpoint: sw.coordinatorIP,
+		APIKey:   os.Getenv("api_key"),
+	}
 	reader, writer, _ := os.Pipe()
 	mw := io.MultiWriter(writer, os.Stderr)
 	sw.reader = reader
@@ -285,7 +290,7 @@ func (sw *ShibuyaWrapper) runCommand() int {
 		cmd.Wait()
 		log.Printf("shibuya-agent: Shutdown is finished, resetting pid to zero")
 		sw.setPid(0)
-		sw.cdrclient.ReportProgress(sw.coordinatorIP, sw.collectionID, sw.planID, sw.engineID, false)
+		sw.cdrclient.ReportProgress(sw.reqOpts, sw.collectionID, sw.planID, sw.engineID, false)
 	}()
 	return pid
 }
@@ -320,7 +325,7 @@ func (sw *ShibuyaWrapper) handleStart(planID string, payload *payload.EngineMess
 	cleanTestData()
 	pf := storage.NewPlanFiles("", sw.collectionID, sw.planID)
 	client := sw.cdrclient
-	content, err := client.FetchFile(sw.coordinatorIP, pf.TestFilePath(payload.TestFile))
+	content, err := client.FetchFile(sw.reqOpts, pf.TestFilePath(payload.TestFile))
 	if err != nil {
 		return
 	}
@@ -328,7 +333,7 @@ func (sw *ShibuyaWrapper) handleStart(planID string, payload *payload.EngineMess
 		return
 	}
 	for dt := range payload.DataFiles {
-		content, err := client.FetchFile(sw.coordinatorIP, pf.EngineDataPath(dt, sw.engineID))
+		content, err := client.FetchFile(sw.reqOpts, pf.EngineDataPath(dt, sw.engineID))
 		if err != nil {
 			return
 		}
@@ -337,7 +342,7 @@ func (sw *ShibuyaWrapper) handleStart(planID string, payload *payload.EngineMess
 		}
 	}
 	if pid := sw.runCommand(); pid != 0 {
-		if err := client.ReportProgress(sw.coordinatorIP, sw.collectionID, planID, sw.engineID, true); err != nil {
+		if err := client.ReportProgress(sw.reqOpts, sw.collectionID, planID, sw.engineID, true); err != nil {
 			log.Println(err)
 		}
 		go sw.tailJemeter()

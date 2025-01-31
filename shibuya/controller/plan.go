@@ -96,6 +96,10 @@ func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
 	if err != nil {
 		return nil, err
 	}
+	apiKey, err := pc.scheduler.GetProjectAPIKey(collection.ProjectID)
+	if err != nil {
+		return nil, err
+	}
 	var wg sync.WaitGroup
 	readingEngines := []shibuyaEngine{}
 	for _, engine := range engines {
@@ -103,7 +107,7 @@ func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
 		go func(engine shibuyaEngine, runID int64) {
 			defer wg.Done()
 			//After this step, the engine instance has states including stream client
-			err := engine.subscribe(runID)
+			err := engine.subscribe(runID, apiKey)
 			if err != nil {
 				return
 			}
@@ -119,21 +123,17 @@ func (pc *PlanController) UnSubscribe() {
 
 }
 
-func (pc *PlanController) progress(cdrclient *cdrclient.Client, externalIP string) bool {
-	if err := cdrclient.ProgressCheck(externalIP, pc.collection.ID, pc.ep.PlanID); err == nil {
+func (pc *PlanController) progress(cdrclient *cdrclient.Client, ro cdrclient.ReqOpts) bool {
+	if err := cdrclient.ProgressCheck(ro, pc.collection.ID, pc.ep.PlanID); err == nil {
 		return true
 	}
 	return false
 }
 
 // TODO: what was the past around force?
-func (pc *PlanController) term(cdrclient *cdrclient.Client) error {
+func (pc *PlanController) term(cdrclient *cdrclient.Client, ro cdrclient.ReqOpts) error {
 	ep := pc.ep
-	ingressIP, err := pc.scheduler.GetIngressUrl(pc.collection.ProjectID)
-	if err != nil {
-		return err
-	}
-	if err := cdrclient.TermPlan(ingressIP, pc.collection.ID, pc.ep.PlanID); err != nil {
+	if err := cdrclient.TermPlan(ro, pc.collection.ID, pc.ep.PlanID); err != nil {
 		return err
 	}
 	model.DeleteRunningPlan(pc.collection.ID, ep.PlanID)

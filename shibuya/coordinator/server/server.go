@@ -23,7 +23,7 @@ const (
 
 type ShibuyaCoordinator struct {
 	inventory *upstream.Inventory
-	Mux       *http.ServeMux
+	Handler   http.Handler
 	cc        CoordinatorConfig
 }
 
@@ -50,6 +50,29 @@ type CoordinatorConfig struct {
 	ListenAddr string
 	EnableTLS  bool
 	InCluster  bool
+	APIKey     string
+}
+
+func (sc *ShibuyaCoordinator) authRequired(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		bearer := r.Header.Get("Authorization")
+		if bearer == "" {
+			http.Error(w, "bearer header is empty", http.StatusForbidden)
+			return
+		}
+		t := strings.Split(bearer, " ")
+		if len(t) != 2 {
+			http.Error(w, "bearer header is invalid", http.StatusBadRequest)
+			return
+		}
+		key := t[1]
+		if key != sc.cc.APIKey {
+			http.Error(w, fmt.Sprintf("incorrect token %s", key), http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
+	return http.HandlerFunc(fn)
 }
 
 func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
@@ -77,7 +100,15 @@ func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 		mux.HandleFunc(route.MakePttern(), route.HandlerFunc)
 	}
 	mux.Handle("/{engine}/stream", &rp)
-	s.Mux = mux
+	handler := http.Handler(mux)
+
+	middlewares := []func(http.Handler) http.Handler{
+		s.authRequired,
+	}
+	for _, m := range middlewares {
+		handler = m(handler)
+	}
+	s.Handler = handler
 	s.cc = cc
 	return s
 }
@@ -121,7 +152,7 @@ func (sic *ShibuyaCoordinator) rewriteURL(r *httputil.ProxyRequest) {
 func (s *ShibuyaCoordinator) ListenHTTP() error {
 	cc := s.cc
 	if cc.EnableTLS {
-		return http.ListenAndServeTLS(cc.ListenAddr, certFile, keyFile, s.Mux)
+		return http.ListenAndServeTLS(cc.ListenAddr, certFile, keyFile, s.Handler)
 	}
-	return http.ListenAndServe(cc.ListenAddr, s.Mux)
+	return http.ListenAndServe(cc.ListenAddr, s.Handler)
 }

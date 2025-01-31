@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rakutentech/shibuya/shibuya/auth/keys"
 	"github.com/rakutentech/shibuya/shibuya/config"
 	model "github.com/rakutentech/shibuya/shibuya/model"
 	serrors "github.com/rakutentech/shibuya/shibuya/scheduler/errors"
@@ -122,6 +123,16 @@ func (kcm *K8sClientManager) GetIngressUrl(projectID int64) (string, error) {
 	}
 	exposedPort := serviceClient.Spec.Ports[0].NodePort
 	return fmt.Sprintf("%s:%d", ip_addr, exposedPort), nil
+}
+
+func (kcm *K8sClientManager) GetProjectAPIKey(projectID int64) (string, error) {
+	keySecretName := projectResource(projectID).makeAPIKeySecretName()
+	secret, err := kcm.client.CoreV1().Secrets(kcm.Namespace).Get(context.TODO(), keySecretName,
+		metav1.GetOptions{})
+	if err != nil {
+		return "", err
+	}
+	return string(secret.Data["api_key"]), nil
 }
 
 func (kcm *K8sClientManager) GetPods(labelSelector, fieldSelector string) ([]apiv1.Pod, error) {
@@ -322,7 +333,8 @@ func (kcm *K8sClientManager) PurgeCollection(collectionID int64) error {
 }
 
 func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
-	name := projectResource(projectID).makeName()
+	pr := projectResource(projectID)
+	name := pr.makeName()
 	deleteOpts := metav1.DeleteOptions{}
 	if err := kcm.client.AppsV1().Deployments(kcm.Namespace).Delete(context.TODO(), name, deleteOpts); err != nil {
 		log.Error(err)
@@ -330,10 +342,11 @@ func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
 	if err := kcm.client.CoreV1().Services(kcm.Namespace).Delete(context.TODO(), name, deleteOpts); err != nil {
 		log.Error(err)
 	}
-	if err := kcm.client.CoreV1().Secrets(kcm.Namespace).Delete(context.TODO(), name, deleteOpts); err != nil {
+	secretsClient := kcm.client.CoreV1().Secrets(kcm.Namespace)
+	if err := secretsClient.Delete(context.TODO(), name, deleteOpts); err != nil {
 		log.Error(err)
 	}
-	return nil
+	return secretsClient.Delete(context.TODO(), pr.makeAPIKeySecretName(), deleteOpts)
 }
 
 func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
@@ -371,6 +384,15 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) (*apiv1.Service, err
 		}
 		return nil, err
 	}
+	key, err := keys.GenerateAPIKey()
+	if err != nil {
+		return nil, err
+	}
+	apiKeySecret := prj.makeAPIKeySecret(key)
+	secretClient := kcm.client.CoreV1().Secrets(kcm.Namespace)
+	if _, err := secretClient.Create(context.TODO(), apiKeySecret, metav1.CreateOptions{}); err != nil {
+		return nil, err
+	}
 	go func() {
 		waitDuration := time.Duration(10 * time.Minute)
 		ticker := time.NewTicker(3 * time.Second)
@@ -406,7 +428,7 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) (*apiv1.Service, err
 			}
 			igCfg := kcm.sc.IngressConfig
 			deployment := prj.makeCoordinatorDeployment(kcm.serviceAccount, igCfg.Image, igCfg.CPU,
-				igCfg.Mem, igCfg.Replicas, kcm.sc.ExecutorConfig.Tolerations, secret)
+				igCfg.Mem, igCfg.Replicas, kcm.sc.ExecutorConfig.Tolerations, secret, apiKeySecret)
 			// there could be duplicated controller deployment from multiple collections
 			// This method has already taken it into considertion.
 			deployClient := kcm.client.AppsV1().Deployments(kcm.Namespace)

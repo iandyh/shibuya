@@ -28,11 +28,16 @@ var (
 	PlanTermError          = errors.New("Plan term error")
 )
 
+type ReqOpts struct {
+	Endpoint string
+	APIKey   string
+}
+
 func NewClient(httpClient *http.Client) *Client {
 	return &Client{httpClient: httpClient}
 }
 
-func (c *Client) TriggerCollection(endpoint string, collection *model.Collection,
+func (c *Client) TriggerCollection(ro ReqOpts, collection *model.Collection,
 	dataConfig map[int64][]*enginesModel.EngineDataConfig, plans []*model.Plan) error {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -45,45 +50,45 @@ func (c *Client) TriggerCollection(endpoint string, collection *model.Collection
 	if err := writer.Close(); err != nil {
 		return err
 	}
-	url := c.makeUrl(endpoint, collection.ID)
+	url := c.makeUrl(ro.Endpoint, collection.ID)
 	req, err := http.NewRequest("POST", url, &buf)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	if err := c.sendRequest(req); err != nil {
+	if err := c.sendRequest(req, ro); err != nil {
 		return fmt.Errorf("%w:%w", CollectionTriggerError, err)
 	}
 	return nil
 }
 
-func (c *Client) Healthcheck(endpoint string, collection *model.Collection, numberOfEngines int) error {
-	resourceUrl := c.makeUrl(endpoint, collection.ID)
+func (c *Client) Healthcheck(ro ReqOpts, collection *model.Collection, numberOfEngines int) error {
+	resourceUrl := c.makeUrl(ro.Endpoint, collection.ID)
 	values := url.Values{}
 	values.Add("engines", strconv.Itoa(numberOfEngines))
 	req, err := c.makeRequestWithValues(resourceUrl, http.MethodGet, values)
 	if err != nil {
 		return err
 	}
-	return c.sendRequest(req)
+	return c.sendRequest(req, ro)
 }
 
-func (c *Client) ProgressCheck(endpoint string, collectionID int64, planID int64) error {
-	endpoint = c.makeUrl(endpoint, collectionID)
+func (c *Client) ProgressCheck(ro ReqOpts, collectionID int64, planID int64) error {
+	endpoint := c.makeUrl(ro.Endpoint, collectionID)
 	resourceUrl := fmt.Sprintf("%s/%d", endpoint, planID)
 	req, err := http.NewRequest("GET", resourceUrl, nil)
 	if err != nil {
 		return err
 	}
-	return c.sendRequest(req)
+	return c.sendRequest(req, ro)
 }
 
-func (c *Client) ReportProgress(endpoint, collectionID, planID string, engineID int, status bool) error {
+func (c *Client) ReportProgress(ro ReqOpts, collectionID, planID string, engineID int, status bool) error {
 	cid, err := strconv.ParseInt(collectionID, 10, 64)
 	if err != nil {
 		return err
 	}
-	endpoint = c.makeUrl(endpoint, cid)
+	endpoint := c.makeUrl(ro.Endpoint, cid)
 	values := url.Values{}
 	values.Add("running", strconv.FormatBool(status))
 	resourceUrl := fmt.Sprintf("%s/%s/%d", endpoint, planID, engineID)
@@ -91,11 +96,11 @@ func (c *Client) ReportProgress(endpoint, collectionID, planID string, engineID 
 	if err != nil {
 		return err
 	}
-	return c.sendRequest(req)
+	return c.sendRequest(req, ro)
 }
 
-func (c *Client) TermCollection(endpoint string, collectionID int64, eps []*model.ExecutionPlan) error {
-	endpoint = c.makeUrl(endpoint, collectionID)
+func (c *Client) TermCollection(ro ReqOpts, collectionID int64, eps []*model.ExecutionPlan) error {
+	endpoint := c.makeUrl(ro.Endpoint, collectionID)
 	planIDs := make([]string, len(eps))
 	for i, ep := range eps {
 		planIDs[i] = strconv.Itoa(int(ep.PlanID))
@@ -106,31 +111,32 @@ func (c *Client) TermCollection(endpoint string, collectionID int64, eps []*mode
 	if err != nil {
 		return err
 	}
-	if err := c.sendRequest(req); err != nil {
+	if err := c.sendRequest(req, ro); err != nil {
 		return fmt.Errorf("%w:%w", CollectionTermError, err)
 	}
 	return nil
 }
 
-func (c *Client) TermPlan(endpoint string, collectionID, planID int64) error {
-	endpoint = c.makeUrl(endpoint, collectionID)
+func (c *Client) TermPlan(ro ReqOpts, collectionID, planID int64) error {
+	endpoint := c.makeUrl(ro.Endpoint, collectionID)
 	resourceUrl := fmt.Sprintf("%s/%d", endpoint, planID)
 	req, err := http.NewRequest("DELETE", resourceUrl, nil)
 	if err != nil {
 		return err
 	}
-	if err := c.sendRequest(req); err != nil {
+	if err := c.sendRequest(req, ro); err != nil {
 		return fmt.Errorf("%w:%w", PlanTermError, err)
 	}
 	return nil
 }
 
-func (c *Client) FetchFile(endpoint string, path string) ([]byte, error) {
-	resourceUrl := fmt.Sprintf("https://%s/%s", endpoint, path)
+func (c *Client) FetchFile(ro ReqOpts, path string) ([]byte, error) {
+	resourceUrl := fmt.Sprintf("https://%s/%s", ro.Endpoint, path)
 	req, err := http.NewRequest("GET", resourceUrl, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", ro.APIKey))
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -162,7 +168,8 @@ func (c *Client) makeRequestWithValues(resourceUrl, method string, values url.Va
 	return nil, nil
 }
 
-func (c *Client) sendRequest(req *http.Request) error {
+func (c *Client) sendRequest(req *http.Request, ro ReqOpts) error {
+	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", ro.APIKey))
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
@@ -171,6 +178,9 @@ func (c *Client) sendRequest(req *http.Request) error {
 }
 
 func (c *Client) makeUrl(endpoint string, collectionID int64) string {
+	if strings.Contains(endpoint, "http") {
+		return fmt.Sprintf("%s/api/collections/%d", endpoint, collectionID)
+	}
 	return fmt.Sprintf("https://%s/api/collections/%d", endpoint, collectionID)
 }
 

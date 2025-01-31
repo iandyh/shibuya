@@ -28,6 +28,10 @@ func (p projectResource) makeName() string {
 	return fmt.Sprintf("ig-%d", p)
 }
 
+func (p projectResource) makeAPIKeySecretName() string {
+	return fmt.Sprintf("%s-key", p.makeName())
+}
+
 func (p projectResource) makeIngressService(serviceType string) *apiv1.Service {
 	labels := makeIngressControllerLabel(int64(p))
 	service := &apiv1.Service{
@@ -86,12 +90,25 @@ func (p projectResource) makeKeyPairSecret(ca *config.CAPair, externalIP string)
 	return p.makeCertKeySecret(cert, key), nil
 }
 
+func (p projectResource) makeAPIKeySecret(key string) *apiv1.Secret {
+	return &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: p.makeAPIKeySecretName(),
+		},
+		Type: v1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			"api_key": []byte(key),
+		},
+	}
+}
+
 func (p projectResource) makeCoordinatorDeployment(serviceAccount, image, cpu, memory string, replicas int32,
-	cfgTolerations []config.Toleration, secret *apiv1.Secret) *appsv1.Deployment {
+	cfgTolerations []config.Toleration, secret, apiKeySecret *apiv1.Secret) *appsv1.Deployment {
 	name := p.makeName()
 	volumeName := "tls"
 	volumes := []apiv1.Volume{
-		makeSecretVolume(volumeName, secret.Name)}
+		makeSecretVolume("tls", secret.Name),
+	}
 	volumeMounts := []apiv1.VolumeMount{
 		makeVolumeMount(volumeName, "/tls", true)}
 	tolerations := prepareTolerations(cfgTolerations)
@@ -176,6 +193,17 @@ func (p projectResource) makeCoordinatorDeployment(serviceAccount, image, cpu, m
 								{
 									Name:  "project_id",
 									Value: fmt.Sprintf("%d", p),
+								},
+								{
+									Name: "api_key",
+									ValueFrom: &apiv1.EnvVarSource{
+										SecretKeyRef: &apiv1.SecretKeySelector{
+											LocalObjectReference: apiv1.LocalObjectReference{
+												Name: apiKeySecret.Name,
+											},
+											Key: "api_key",
+										},
+									},
 								},
 							},
 							VolumeMounts: volumeMounts,

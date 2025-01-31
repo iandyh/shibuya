@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	cdrclient "github.com/rakutentech/shibuya/shibuya/coordinator/client"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
@@ -143,7 +144,15 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 		}
 		d.Content = content
 	}
-	if err := c.cdrclient.TriggerCollection(ingressIP, collection, planEngineDataConfigs, plans); err != nil {
+	apiKey, err := c.Scheduler.GetProjectAPIKey(collection.ProjectID)
+	if err != nil {
+		return err
+	}
+	ro := cdrclient.ReqOpts{
+		Endpoint: ingressIP,
+		APIKey:   apiKey,
+	}
+	if err := c.cdrclient.TriggerCollection(ro, collection, planEngineDataConfigs, plans); err != nil {
 		return err
 	}
 	for _, ep := range collection.ExecutionPlans {
@@ -175,7 +184,15 @@ func (c *Controller) TermCollection(collection *model.Collection, force bool) (e
 	if err != nil {
 		return err
 	}
-	if err := c.cdrclient.TermCollection(externalIP, collection.ID, eps); err != nil {
+	apiKey, err := c.Scheduler.GetProjectAPIKey(collection.ProjectID)
+	if err != nil {
+		return err
+	}
+	ro := cdrclient.ReqOpts{
+		Endpoint: externalIP,
+		APIKey:   apiKey,
+	}
+	if err := c.cdrclient.TermCollection(ro, collection.ID, eps); err != nil {
 		return err
 	}
 	return e
@@ -217,7 +234,15 @@ func (c *Controller) CollectionStatus(collection *model.Collection) (*smodel.Col
 	if err != nil || ingressIP == "" {
 		return cs, nil
 	}
-	if err := c.cdrclient.Healthcheck(ingressIP, collection, numberOfEngines); err != nil {
+	apiKey, err := c.Scheduler.GetProjectAPIKey(collection.ProjectID)
+	if err != nil {
+		return cs, nil
+	}
+	ro := cdrclient.ReqOpts{
+		Endpoint: ingressIP,
+		APIKey:   apiKey,
+	}
+	if err := c.cdrclient.Healthcheck(ro, collection, numberOfEngines); err != nil {
 		return cs, nil
 	}
 	for _, ps := range cs.Plans {
