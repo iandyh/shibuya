@@ -11,3 +11,5 @@ ENV env ${env}
 COPY ./ui/ /
 ENV binary=${binary_name}
 CMD ${binary}
+
+USER ${USER}
