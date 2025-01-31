@@ -1,36 +1,31 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: shibuya-coordinator
+  name: shibuya-scraper
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: shibuya-coordinator
+  name: shibuya-scraper
 rules:
   - apiGroups:
       - ""
     resources:
-      - endpoints
+      - namespaces
+      - pods
     verbs:
       - list
-  - apiGroups:
-    - "apps"
-    resources:
-      - statefulsets
-    verbs:
-      - get
 
 ---
 
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: shibuya-coordinator
+  name: shibuya-scraper
 subjects:
 - kind: ServiceAccount
-  name:  shibuya-coordinator
+  name:  shibuya-scraper
 roleRef:
   kind: Role
-  name: shibuya-coordinator
+  name: shibuya-scraper
   apiGroup: rbac.authorization.k8s.io

@@ -26,12 +26,13 @@ import (
 )
 
 type K8sClientManager struct {
-	sc             config.ShibuyaConfig
-	client         *kubernetes.Clientset
-	serviceAccount string
-	Namespace      string
-	httpClient     *http.Client
-	CAPair         *config.CAPair
+	sc                    config.ShibuyaConfig
+	client                *kubernetes.Clientset
+	cdrServiceAccount     string
+	scraperServiceAccount string
+	Namespace             string
+	httpClient            *http.Client
+	CAPair                *config.CAPair
 }
 
 func NewK8sClientManager(cfg config.ShibuyaConfig) *K8sClientManager {
@@ -50,7 +51,7 @@ func NewK8sClientManager(cfg config.ShibuyaConfig) *K8sClientManager {
 		},
 	}
 	return &K8sClientManager{
-		cfg, c, "shibuya-coordinator", cfg.ExecutorConfig.Namespace, httpClient, cfg.CAPair,
+		cfg, c, "shibuya-coordinator", "shibuya-scraper", cfg.ExecutorConfig.Namespace, httpClient, cfg.CAPair,
 	}
 }
 
@@ -351,7 +352,7 @@ func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
 
 func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
 	cr := collectionResource(collectionID)
-	promDeployment := cr.makeScraperDeployment(kcm.serviceAccount, kcm.Namespace,
+	promDeployment := cr.makeScraperDeployment(kcm.scraperServiceAccount, kcm.Namespace,
 		kcm.sc.ExecutorConfig.NodeAffinity, kcm.sc.ExecutorConfig.Tolerations, kcm.sc.ScraperContainer)
 	promConfig, err := cr.makeScraperConfig(kcm.Namespace, kcm.sc.MetricStorage)
 	if err != nil {
@@ -427,7 +428,7 @@ func (kcm *K8sClientManager) ExposeProject(projectID int64) (*apiv1.Service, err
 				return
 			}
 			igCfg := kcm.sc.IngressConfig
-			deployment := prj.makeCoordinatorDeployment(kcm.serviceAccount, igCfg.Image, igCfg.CPU,
+			deployment := prj.makeCoordinatorDeployment(kcm.cdrServiceAccount, igCfg.Image, igCfg.CPU,
 				igCfg.Mem, igCfg.Replicas, kcm.sc.ExecutorConfig.Tolerations, secret, apiKeySecret)
 			// there could be duplicated controller deployment from multiple collections
 			// This method has already taken it into considertion.
