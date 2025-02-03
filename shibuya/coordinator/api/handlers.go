@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rakutentech/shibuya/shibuya/api/httproute"
 	payload "github.com/rakutentech/shibuya/shibuya/coordinator/payload"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/rakutentech/shibuya/shibuya/coordinator/planprogress"
@@ -21,73 +21,65 @@ import (
 
 type APIServer struct {
 	pubsubServer *pubsub.PubSubServer
-	Routes       httproute.Routes
 	planProgress *planprogress.PlanProgress
 	inventory    *upstream.Inventory
 }
 
-var (
-	PlanFilesServer = http.FileServer(http.Dir(storage.DirRoot))
-)
-
 func NewAPIServer(server *pubsub.PubSubServer, planProgress *planprogress.PlanProgress, inventory *upstream.Inventory) *APIServer {
 	s := &APIServer{pubsubServer: server, planProgress: planProgress, inventory: inventory}
-	s.Routes = s.MakeHTTPRoutes()
 	return s
 }
 
-func (s *APIServer) MakeHTTPRoutes() httproute.Routes {
-	routes := httproute.Routes{
+func (s *APIServer) Router() *httproute.Router {
+	collectionRoutes := httproute.Routes{
 		{
 			Name:        "collection",
 			Method:      "POST",
-			Path:        "/api/collections/{collection_id}",
+			Path:        "{collection_id}",
 			HandlerFunc: s.collectionTriggerHandler,
 		},
 		{
 			Name:        "collection",
 			Method:      "GET",
-			Path:        "/api/collections/{collection_id}",
+			Path:        "{collection_id}",
 			HandlerFunc: s.collectionHealthCheckHandler,
 		},
 		{
 			Name:        "stop collection",
 			Method:      "DELETE",
-			Path:        "/api/collections/{collection_id}",
+			Path:        "{collection_id}",
 			HandlerFunc: s.collectionTermHandler,
 		},
 		{
 			Name:        "collection plan running status",
 			Method:      "GET",
-			Path:        "/api/collections/{collection_id}/{plan_id}",
+			Path:        "{collection_id}/{plan_id}",
 			HandlerFunc: s.collectionProgressHandler,
 		},
 		{
 			Name:        "Term a plan",
 			Method:      "DELETE",
-			Path:        "/api/collections/{collection_id}/{plan_id}",
+			Path:        "/{collection_id}/{plan_id}",
 			HandlerFunc: s.planTerminationHandler,
 		},
 		{
 			Name:        "report engine running status",
 			Method:      "PUT",
-			Path:        "/api/collections/{collection_id}/{plan_id}/{engine_id}",
+			Path:        "/{collection_id}/{plan_id}/{engine_id}",
 			HandlerFunc: s.engineReportProgressHandler,
 		},
-		{
-			Name:        "Serve Plan files",
-			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{filepath...}", storage.DirRoot),
-			HandlerFunc: s.servePlanFiles,
-		},
 	}
-	return routes
-}
-
-func (s *APIServer) servePlanFiles(w http.ResponseWriter, req *http.Request) {
-	filepath := req.PathValue("filepath")
-	req.URL.Path = fmt.Sprintf("/%s", filepath)
-	PlanFilesServer.ServeHTTP(w, req)
+	collectionRouter := &httproute.Router{
+		Name: "collection handlers",
+		Path: "/collections",
+	}
+	collectionRouter.AddRoutes(collectionRoutes)
+	apiRouter := &httproute.Router{
+		Name: "api",
+		Path: "/api",
+	}
+	apiRouter.Mount(collectionRouter)
+	return apiRouter
 }
 
 func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Request) {

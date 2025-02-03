@@ -12,6 +12,7 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/controller"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
 	utils "github.com/rakutentech/shibuya/shibuya/utils"
@@ -20,86 +21,83 @@ import (
 )
 
 type CollectionAPI struct {
-	PathHandler
 	objStorage object_storage.StorageInterface
 	ctr        *controller.Controller
 	sc         config.ShibuyaConfig
 }
 
 func NewCollectionAPI(sc config.ShibuyaConfig, objStorage object_storage.StorageInterface, ctr *controller.Controller) *CollectionAPI {
-	return &CollectionAPI{
-		PathHandler: PathHandler{
-			Path: "/api/collections",
-		},
+	ca := &CollectionAPI{
 		objStorage: objStorage,
 		ctr:        ctr,
 		sc:         sc,
 	}
+	return ca
 }
 
-func (ca *CollectionAPI) collectRoutes() Routes {
-	return Routes{
+func (ca *CollectionAPI) Router() *httproute.Router {
+	router := httproute.NewRouter("collection api", "/collections")
+	router.AddRoutes(httproute.Routes{
 		{
 			Name:        "Create a collection",
 			Method:      "POST",
-			Path:        ca.Path,
 			HandlerFunc: ca.collectionCreateHandler,
 		},
 		{
 			Name:        "Get a collection",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}", ca.Path),
+			Path:        "{collection_id}",
 			HandlerFunc: ca.collectionGetHandler,
 		},
 		{
 			Name:        "Update a collection",
 			Method:      "PUT",
-			Path:        fmt.Sprintf("%s/{collection_id}", ca.Path),
+			Path:        "{collection_id}",
 			HandlerFunc: ca.collectionUpdateHandler,
 		},
 		{
 			Name:        "Delete a collection",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{collection_id}", ca.Path),
+			Path:        "{collection_id}",
 			HandlerFunc: ca.collectionDeleteHandler,
 		},
 
 		{
 			Name:        "Upload a collection files",
 			Method:      "PUT",
-			Path:        fmt.Sprintf("%s/{collection_id}/files", ca.Path),
+			Path:        "{collection_id}/files",
 			HandlerFunc: ca.collectionFilesUploadHandler,
 		},
 		{
 			Name:        "Get a collection files",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/files", ca.Path),
+			Path:        "{collection_id}/files",
 			HandlerFunc: ca.collectionFilesGetHandler,
 		},
 		{
 			Name:        "Delete a collection files",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{collection_id}/files", ca.Path),
+			Path:        "{collection_id}/files",
 			HandlerFunc: ca.collectionFilesDeleteHandler,
 		},
 
 		{
 			Name:        "Update a collection config",
 			Method:      "PUT",
-			Path:        fmt.Sprintf("%s/{collection_id}/config", ca.Path),
+			Path:        "{collection_id}/config",
 			HandlerFunc: ca.collectionUploadHandler,
 		},
 		{
 			Name:        "GET a collection config as a file",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/config", ca.Path),
+			Path:        "{collection_id}/config",
 			HandlerFunc: ca.collectionConfigGetHandler,
 		},
 
 		{
 			Name:        "GET collection engine details",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/engines_detail", ca.Path),
+			Path:        "{collection_id}/details",
 			HandlerFunc: ca.collectionEnginesDetailHandler,
 		},
 
@@ -107,73 +105,74 @@ func (ca *CollectionAPI) collectRoutes() Routes {
 		{
 			Name:        "Launch a collection",
 			Method:      "POST",
-			Path:        fmt.Sprintf("%s/{collection_id}/deploy", ca.Path),
+			Path:        "{collection_id}/deploy",
 			HandlerFunc: ca.collectionDeploymentHandler,
 		},
 		{
 			Name:        "Trigger a collection",
 			Method:      "POST",
-			Path:        fmt.Sprintf("%s/{collection_id}/trigger", ca.Path),
+			Path:        "{collection_id}/trigger",
 			HandlerFunc: ca.collectionTriggerHandler,
 		},
 		{
 			Name:        "Stop a collection",
 			Method:      "POST",
-			Path:        fmt.Sprintf("%s/{collection_id}/stop", ca.Path),
+			Path:        "{collection_id}/stop",
 			HandlerFunc: ca.collectionTermHandler,
 		},
 		{
 			Name:        "Purge a collection",
 			Method:      "POST",
-			Path:        fmt.Sprintf("%s/{collection_id}/purge", ca.Path),
+			Path:        "{collection_id}/purge",
 			HandlerFunc: ca.collectionPurgeHandler,
 		},
 
 		{
 			Name:        "Get collection runs",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/runs", ca.Path),
+			Path:        "{collection_id}/runs",
 			HandlerFunc: ca.runGetHandler,
 		},
 		{
 			Name:        "Get collection runs",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/runs/{run_id}", ca.Path),
+			Path:        "{collection_id}/runs/{run_id}",
 			HandlerFunc: ca.runGetHandler,
 		},
 		{
 			Name:        "Delete a collection run",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{collection_id}/runs/{run_id}", ca.Path),
+			Path:        "{collection_id}/runs/{run_id}",
 			HandlerFunc: ca.runDeleteHandler,
 		},
 		{
 			Name:        "Delete collection runs",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{collection_id}/runs", ca.Path),
+			Path:        "{collection_id}/runs",
 			HandlerFunc: ca.runDeleteHandler,
 		},
 
 		{
 			Name:        "Get collection status",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/status", ca.Path),
+			Path:        "{collection_id}/status",
 			HandlerFunc: ca.collectionStatusHandler,
 		},
 
 		{
 			Name:        "Stream collection metrics",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/stream", ca.Path),
+			Path:        "{collection_id}/stream",
 			HandlerFunc: ca.streamCollectionMetrics,
 		},
 		{
 			Name:        "Handle a collection plan log",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{collection_id}/logs/{plan_id}", ca.Path),
+			Path:        "{collection_id}/logs/{plan_id}",
 			HandlerFunc: ca.planLogHandler,
 		},
-	}
+	})
+	return router
 }
 
 func getCollection(collectionID string) (*model.Collection, error) {

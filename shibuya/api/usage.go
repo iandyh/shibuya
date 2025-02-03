@@ -1,41 +1,38 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 
 	log "github.com/sirupsen/logrus"
 
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
-type UsageAPI struct {
-	PathHandler
-}
+type UsageAPI struct{}
 
 func NewUsageAPI() *UsageAPI {
-	return &UsageAPI{
-		PathHandler: PathHandler{
-			Path: "/api/usage",
-		},
-	}
+	ua := &UsageAPI{}
+	return ua
 }
 
-func (ua *UsageAPI) collectRoutes() Routes {
-	return Routes{
+func (ua *UsageAPI) Router() *httproute.Router {
+	router := httproute.NewRouter("usage api", "usage")
+	router.AddRoutes(httproute.Routes{
 		{
 			Name:        "Get usage summary",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/summary", ua.Path),
+			Path:        "summary",
 			HandlerFunc: ua.usageSummaryHandler,
 		},
 		{
 			Name:        "Get usage summary by sid",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/summary_sid", ua.Path),
+			Path:        "summary_sid",
 			HandlerFunc: ua.usageSummaryHandlerBySid,
 		},
-	}
+	})
+	return router
 }
 
 func (ua *UsageAPI) usageSummaryHandler(w http.ResponseWriter, req *http.Request) {

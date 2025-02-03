@@ -5,9 +5,9 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/rakutentech/shibuya/shibuya/api"
 	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	log "github.com/sirupsen/logrus"
 )
@@ -15,8 +15,19 @@ import (
 type UI struct {
 	sc         config.ShibuyaConfig
 	tmpl       *template.Template
-	Routes     []*api.Route
 	authMethod auth.LdapAuth
+}
+
+var (
+	staticFileServer = http.FileServer(http.Dir("/static"))
+)
+
+func serveStaticFile(w http.ResponseWriter, req *http.Request) {
+	// Set the cache expiration time to 7 days
+	w.Header().Set("Cache-Control", "public, max-age=604800")
+	filepath := req.PathValue("filepath")
+	req.URL.Path = filepath
+	staticFileServer.ServeHTTP(w, req)
 }
 
 func NewUI(sc config.ShibuyaConfig) *UI {
@@ -113,8 +124,12 @@ func (u *UI) loginPageHandler(w http.ResponseWriter, r *http.Request) {
 	template.Execute(w, e)
 }
 
-func (u *UI) InitRoutes() api.Routes {
-	return api.Routes{
+func (u *UI) Router() *httproute.Router {
+	router := &httproute.Router{
+		Name: "ui",
+		Path: "",
+	}
+	routes := httproute.Routes{
 		{
 			Name:        "home",
 			Method:      "GET",
@@ -139,5 +154,13 @@ func (u *UI) InitRoutes() api.Routes {
 			Path:        "/logout",
 			HandlerFunc: u.logoutHandler,
 		},
+		{
+			Name:        "Get static files",
+			Method:      "GET",
+			Path:        "/static/{filepath...}",
+			HandlerFunc: serveStaticFile,
+		},
 	}
+	router.AddRoutes(routes)
+	return router
 }

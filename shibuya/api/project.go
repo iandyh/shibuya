@@ -6,56 +6,53 @@ import (
 	"strconv"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
 type ProjectAPI struct {
-	PathHandler
 	sc config.ShibuyaConfig
 }
 
 func NewProjectAPI(sc config.ShibuyaConfig) *ProjectAPI {
-	return &ProjectAPI{
-		PathHandler: PathHandler{
-			Path: "/api/projects",
-		},
+	pa := &ProjectAPI{
 		sc: sc,
 	}
+	return pa
 }
 
-func (pa *ProjectAPI) collectRoutes() Routes {
-	return Routes{
+func (pa *ProjectAPI) Router() *httproute.Router {
+	router := httproute.NewRouter("project api", "projects")
+	router.AddRoutes(httproute.Routes{
 		{
 			Name:        "Get all projects",
 			Method:      "GET",
-			Path:        pa.Path,
 			HandlerFunc: pa.projectsGetHandler,
 		},
 		{
 			Name:        "Create a project",
 			Method:      "POST",
-			Path:        pa.Path,
 			HandlerFunc: pa.projectCreateHandler,
 		},
 		{
 			Name:        "Get a project",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{project_id}", pa.Path),
+			Path:        "{project_id}",
 			HandlerFunc: pa.projectGetHandler,
 		},
 		{
 			Name:        "Update a project",
 			Method:      "PUT",
-			Path:        pa.Path,
 			HandlerFunc: pa.projectUpdateHandler,
 		},
 		{
 			Name:        "Delete a project",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{project_id}", pa.Path),
+			Path:        "{project_id}",
 			HandlerFunc: pa.projectDeleteHandler,
 		},
-	}
+	})
+	return router
 }
 
 func getProject(projectID string) (*model.Project, error) {

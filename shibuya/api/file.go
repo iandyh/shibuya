@@ -6,42 +6,32 @@ import (
 	"net/http"
 	"time"
 
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
 )
 
 type FileAPI struct {
-	PathHandler
 	objStorage object_storage.StorageInterface
 }
 
-var (
-	staticFileServer = http.FileServer(http.Dir("/static"))
-)
-
 func NewFileAPI(objStorage object_storage.StorageInterface) *FileAPI {
-	return &FileAPI{
-		PathHandler: PathHandler{
-			Path: "/api/files",
-		},
+	fa := &FileAPI{
 		objStorage: objStorage,
 	}
+	return fa
 }
 
-func (fa *FileAPI) collectRoutes() Routes {
-	return Routes{
+func (fa *FileAPI) Router() *httproute.Router {
+	router := httproute.NewRouter("files", "/files")
+	router.AddRoutes(httproute.Routes{
 		{
 			Name:        "Get a file",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{kind}/{id}/{name}", fa.Path),
+			Path:        "{kind}/{id}/{name}",
 			HandlerFunc: fa.fileDownloadHandler,
 		},
-		{
-			Name:        "Get static files",
-			Method:      "GET",
-			Path:        "/static/{filepath...}",
-			HandlerFunc: fa.serveStaticFile,
-		},
-	}
+	})
+	return router
 }
 
 func (fa *FileAPI) fileDownloadHandler(w http.ResponseWriter, req *http.Request) {
@@ -58,12 +48,4 @@ func (fa *FileAPI) fileDownloadHandler(w http.ResponseWriter, req *http.Request)
 	r := bytes.NewReader(data)
 	w.Header().Add("Content-Disposition", "Attachment")
 	http.ServeContent(w, req, filename, time.Now(), r)
-}
-
-func (fa *FileAPI) serveStaticFile(w http.ResponseWriter, req *http.Request) {
-	// Set the cache expiration time to 7 days
-	w.Header().Set("Cache-Control", "public, max-age=604800")
-	filepath := req.PathValue("filepath")
-	req.URL.Path = filepath
-	staticFileServer.ServeHTTP(w, req)
 }

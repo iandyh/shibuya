@@ -11,7 +11,9 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/coordinator/api"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/planprogress"
+	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	pubsub "github.com/reqfleet/pubsub/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -42,6 +44,10 @@ var tr = &http.Transport{
 	// But it should no longer than 5 minutes.
 	ResponseHeaderTimeout: 5 * time.Minute,
 }
+
+var (
+	PlanFilesServer = http.FileServer(http.Dir(storage.DirRoot))
+)
 
 type CoordinatorConfig struct {
 	Namespace  string
@@ -75,6 +81,21 @@ func (sc *ShibuyaCoordinator) authRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(fn)
 }
 
+func newFileServer() httproute.Routes {
+	return httproute.Routes{
+		{
+			Name:   "Serve Plan files",
+			Method: "GET",
+			Path:   fmt.Sprintf("%s/{filepath...}", storage.DirRoot),
+			HandlerFunc: func(w http.ResponseWriter, r *http.Request) {
+				filepath := r.PathValue("filepath")
+				r.URL.Path = fmt.Sprintf("/%s", filepath)
+				PlanFilesServer.ServeHTTP(w, r)
+			},
+		},
+	}
+}
+
 func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 	log.Infof("Engine namespace %s", cc.Namespace)
 	log.Infof("Project ID: %s", cc.ProjectID)
@@ -96,13 +117,15 @@ func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 		Rewrite:   s.rewriteURL,
 		Transport: tr,
 	}
-	mux := http.NewServeMux()
+	rootRouter := &httproute.Router{
+		Name: "shibuya coordinator",
+		Path: "",
+	}
 	pp := planprogress.NewPlanProgress()
 	apiserver := api.NewAPIServer(pub, pp, inventory)
-	routes := apiserver.MakeHTTPRoutes()
-	for _, route := range routes {
-		mux.HandleFunc(route.MakePttern(), route.HandlerFunc)
-	}
+	rootRouter.Mount(apiserver.Router())
+	rootRouter.AddRoutes(newFileServer())
+	mux := rootRouter.Mux()
 	mux.Handle("/{engine}/stream", &rp)
 	handler := http.Handler(mux)
 

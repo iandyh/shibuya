@@ -7,6 +7,7 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/controller"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
 )
 
@@ -16,8 +17,8 @@ type ShibuyaAPI struct {
 	ctr        *controller.Controller
 }
 
-type APIhandler interface {
-	collectRoutes() Routes
+type ShibuyaAPIComponent interface {
+	Router() *httproute.Router
 }
 
 func renderJSON(w http.ResponseWriter, status int, content interface{}) {
@@ -36,15 +37,14 @@ func NewAPIServer(sc config.ShibuyaConfig) *ShibuyaAPI {
 	return c
 }
 
-func (s *ShibuyaAPI) InitRoutes() Routes {
-	routes := make(Routes, 0)
+func (s *ShibuyaAPI) Router() *httproute.Router {
 	projectAPI := NewProjectAPI(s.sc)
 	planAPI := NewPlanAPI(s.sc, s.objStorage)
 	collectionAPI := NewCollectionAPI(s.sc, s.objStorage, s.ctr)
 	fileAPI := NewFileAPI(s.objStorage)
 	usageAPI := NewUsageAPI()
 	adminAPI := NewAdminAPI(s.sc.Context)
-	apiHandlers := []APIhandler{
+	apiComponents := []ShibuyaAPIComponent{
 		projectAPI,
 		planAPI,
 		collectionAPI,
@@ -52,15 +52,16 @@ func (s *ShibuyaAPI) InitRoutes() Routes {
 		usageAPI,
 		adminAPI,
 	}
-	for _, h := range apiHandlers {
-		routes = append(routes, h.collectRoutes()...)
+	apiRouter := httproute.NewRouter("api router", "/api")
+	for _, ac := range apiComponents {
+		apiRouter.Mount(ac.Router())
 	}
-	for _, r := range routes {
+	for _, r := range apiRouter.GetRoutes() {
 		// TODO! We don't require auth for usage endpoint for now.
 		if strings.Contains(r.Path, "usage") {
 			continue
 		}
 		r.HandlerFunc = authRequired(r.HandlerFunc, s.sc.AuthConfig)
 	}
-	return routes
+	return apiRouter
 }

@@ -1,76 +1,73 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
 )
 
 type PlanAPI struct {
-	PathHandler
 	objStorage object_storage.StorageInterface
 	sc         config.ShibuyaConfig
 }
 
 func NewPlanAPI(sc config.ShibuyaConfig, objStorage object_storage.StorageInterface) *PlanAPI {
-	return &PlanAPI{
-		PathHandler: PathHandler{
-			Path: "/api/plans",
-		},
+	pa := &PlanAPI{
 		objStorage: objStorage,
 		sc:         sc,
 	}
+	return pa
 }
 
-func (pa *PlanAPI) collectRoutes() Routes {
-	return Routes{
+func (pa *PlanAPI) Router() *httproute.Router {
+	router := httproute.NewRouter("plan api", "/plans")
+	router.AddRoutes(httproute.Routes{
 		{
 			Name:        "Create a plan",
 			Method:      "POST",
-			Path:        pa.Path,
 			HandlerFunc: pa.planCreateHandler,
 		},
 		{
 			Name:        "Get a plan",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{plan_id}", pa.Path),
+			Path:        "{plan_id}",
 			HandlerFunc: pa.planGetHandler,
 		},
 		{
 			Name:        "Update a plan",
 			Method:      "PUT",
-			Path:        pa.Path,
 			HandlerFunc: pa.planUpdateHandler,
 		},
 		{
 			Name:        "Delete a plan",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{plan_id}", pa.Path),
+			Path:        "{plan_id}",
 			HandlerFunc: pa.planDeleteHandler,
 		},
 		{
 			Name:        "Get a plan files",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/{plan_id}/files", pa.Path),
+			Path:        "{plan_id}/files",
 			HandlerFunc: pa.planFilesGetHandler,
 		},
 		{
 			Name:        "Upload files in a plan",
 			Method:      "PUT",
-			Path:        fmt.Sprintf("%s/{plan_id}/files", pa.Path),
+			Path:        "{plan_id}/files",
 			HandlerFunc: pa.planFilesUploadHandler,
 		},
 		{
 			Name:        "Delete files in a plan",
 			Method:      "DELETE",
-			Path:        fmt.Sprintf("%s/{plan_id}/files", pa.Path),
+			Path:        "{plan_id}/files",
 			HandlerFunc: pa.planFilesDeleteHandler,
 		},
-	}
+	})
+	return router
 }
 
 func getPlan(planID string) (*model.Plan, error) {

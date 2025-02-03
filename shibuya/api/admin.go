@@ -1,25 +1,22 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	smodel "github.com/rakutentech/shibuya/shibuya/scheduler/model"
 )
 
 type AdminAPI struct {
-	PathHandler
 	ctx string
 }
 
 func NewAdminAPI(ctx string) *AdminAPI {
-	return &AdminAPI{
-		PathHandler: PathHandler{
-			Path: "/api/admin",
-		},
+	aa := &AdminAPI{
 		ctx: ctx,
 	}
+	return aa
 }
 
 type AdminCollectionResponse struct {
@@ -27,15 +24,18 @@ type AdminCollectionResponse struct {
 	NodePools          smodel.AllNodesInfo  `json:"node_pools"`
 }
 
-func (aa *AdminAPI) collectRoutes() Routes {
-	return Routes{
+func (aa *AdminAPI) Router() *httproute.Router {
+	router := httproute.NewRouter("admin", "admin")
+	routes := httproute.Routes{
 		{
 			Name:        "Get running collections by admin",
 			Method:      "GET",
-			Path:        fmt.Sprintf("%s/collections", aa.Path),
+			Path:        "collections",
 			HandlerFunc: aa.collectionAdminGetHandler,
 		},
 	}
+	router.AddRoutes(routes)
+	return router
 }
 
 func (aa *AdminAPI) collectionAdminGetHandler(w http.ResponseWriter, r *http.Request) {

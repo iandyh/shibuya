@@ -12,6 +12,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/api"
 	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	"github.com/rakutentech/shibuya/shibuya/ui"
 	_ "go.uber.org/automaxprocs"
@@ -24,20 +25,18 @@ func main() {
 	if err := auth.CreateSesstionStore(endpoint, sc.DBConf.Keypairs); err != nil {
 		log.Fatal(err)
 	}
-
 	if err := model.CreateMySQLClient(sc.DBConf); err != nil {
 		log.Fatal(err)
 	}
-	routes := api.NewAPIServer(sc).InitRoutes()
-	uiRoutes := ui.NewUI(sc).InitRoutes()
-	routes = append(routes, uiRoutes...)
-	mux := http.NewServeMux()
-	for _, route := range routes {
-		mux.HandleFunc(route.MakePttern(), route.HandlerFunc)
+	rootRouter := &httproute.Router{
+		Name: "root",
+		Path: "",
 	}
+	rootRouter.Mount(api.NewAPIServer(sc).Router())
+	rootRouter.Mount(ui.NewUI(sc).Router())
+	mux := rootRouter.Mux()
 
 	mux.Handle("GET /metrics", promhttp.Handler())
-
 	handler := http.Handler(mux)
 	handler = api.RequestLoggerWithoutPaths(handler)(handler)
 	middlewares := []func(http.Handler) http.Handler{
