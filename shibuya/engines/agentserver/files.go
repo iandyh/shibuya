@@ -10,19 +10,39 @@ const (
 	FILEMODE = 0700
 )
 
-var (
-	AGENT_ROOT  = os.Getenv("AGENT_ROOT")
-	RESULT_ROOT = path.Join(AGENT_ROOT, "/test-result")
-)
+type AgentDirectory string
+type TestFilesDirectory string
+type ResultFilesDirectory string
+type ConfFilesDirectory string
 
-type TestFolder string
+type AgentDir struct {
+	dir string
+}
 
-var (
-	testFileFolder   = TestFolder("/test-data")
-	testResultFolder = TestFolder(RESULT_ROOT)
-)
+func NewAgentDirHandler(dir string) AgentDir {
+	if dir == "" {
+		dir = os.Getenv("AGENT_ROOT")
+	}
+	return AgentDir{dir: dir}
+}
 
-func (tf TestFolder) reset() error {
+func (af AgentDir) Dir() AgentDirectory {
+	return AgentDirectory(af.dir)
+}
+
+func (af AgentDir) TestFilesDir() TestFilesDirectory {
+	return TestFilesDirectory(path.Join("", "/test-data"))
+}
+
+func (af AgentDir) ConfFilesDir() ConfFilesDirectory {
+	return ConfFilesDirectory(path.Join(af.dir, "test-conf"))
+}
+
+func (af AgentDir) ResultFilesDir() ResultFilesDirectory {
+	return ResultFilesDirectory(path.Join(af.dir, "test-result"))
+}
+
+func (tf TestFilesDirectory) reset() error {
 	files, err := os.ReadDir(string(tf))
 	if err != nil {
 		return err
@@ -36,7 +56,7 @@ func (tf TestFolder) reset() error {
 	return nil
 }
 
-func (tf TestFolder) saveFile(filename string, file []byte) error {
+func (tf TestFilesDirectory) saveFile(filename string, file []byte) error {
 	filePath := filepath.Join(string(tf), filepath.Base(filename))
 	if err := os.WriteFile(filePath, file, FILEMODE); err != nil {
 		return err
@@ -44,6 +64,27 @@ func (tf TestFolder) saveFile(filename string, file []byte) error {
 	return nil
 }
 
-func (tf TestFolder) resultFile(filename string) string {
-	return path.Join(RESULT_ROOT, filename)
+func join(parent string, subdirs ...string) string {
+	full := make([]string, len(subdirs)+1)
+	full[0] = parent
+	for i, item := range subdirs {
+		full[i+1] = item
+	}
+	return path.Join(full...)
+}
+
+func (af AgentDirectory) Filepath(sub ...string) string {
+	return join(string(af), sub...)
+}
+
+func (cf ConfFilesDirectory) Filepath(sub ...string) string {
+	return join(string(cf), sub...)
+}
+
+func (tf TestFilesDirectory) Filepath(sub ...string) string {
+	return join(string(tf), sub...)
+}
+
+func (rf ResultFilesDirectory) resultFile(sub ...string) string {
+	return join(string(rf), sub...)
 }

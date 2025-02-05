@@ -44,6 +44,7 @@ type AgentServer struct {
 	reader          io.ReadCloser
 	writer          io.Writer
 	logger          *log.Entry
+	angentDir       AgentDir
 }
 
 func NewAgentServer(opts AgentServerOptions) *AgentServer {
@@ -65,6 +66,7 @@ func NewAgentServer(opts AgentServerOptions) *AgentServer {
 		reader:          reader,
 		writer:          mw,
 		logger:          opts.Logger,
+		angentDir:       NewAgentDirHandler(""),
 	}
 	log.SetOutput(mw)
 	go as.listenForSubscribers()
@@ -251,7 +253,7 @@ func (as *AgentServer) runCommand() error {
 	// command will wait for the shutdown signal. Once it's done, the command
 	// func should finish
 	resultFileFunc := as.options.ResultFileFunc
-	filename := testResultFolder.resultFile(resultFileFunc(as.fileId))
+	filename := as.angentDir.ResultFilesDir().resultFile(resultFileFunc(as.fileId))
 	extraArgs := as.options.ExtraArgs
 	extraArgs = append(extraArgs, filename)
 	command := as.options.StartCommand.ToExec(extraArgs)
@@ -278,7 +280,7 @@ func (as *AgentServer) runCommand() error {
 }
 
 func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
-	if err := testFileFolder.reset(); err != nil {
+	if err := as.angentDir.TestFilesDir().reset(); err != nil {
 		return err
 	}
 	engineMeta := as.options.EngineMeta
@@ -291,7 +293,7 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 	if err != nil {
 		return err
 	}
-	if err := testFileFolder.saveFile(as.options.TestFileName, content); err != nil {
+	if err := as.angentDir.TestFilesDir().saveFile(as.options.TestFileName, content); err != nil {
 		return err
 	}
 	for dt := range payload.DataFiles {
@@ -299,7 +301,7 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 		if err != nil {
 			return err
 		}
-		if err := testFileFolder.saveFile(dt, content); err != nil {
+		if err := as.angentDir.TestFilesDir().saveFile(dt, content); err != nil {
 			return err
 		}
 	}
