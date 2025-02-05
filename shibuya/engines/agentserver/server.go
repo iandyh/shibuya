@@ -256,7 +256,7 @@ func (as *AgentServer) runCommand() error {
 	filename := as.angentDir.ResultFilesDir().resultFile(resultFileFunc(as.fileId))
 	extraArgs := as.options.ExtraArgs
 	extraArgs = append(extraArgs, filename)
-	command := as.options.RunCommand.ToExec(extraArgs)
+	command := as.options.StartCommand.ToExec(extraArgs)
 	as.logger.Infof("command is %s", command.String())
 	command.Stderr = as.writer
 	if err := command.Start(); err != nil {
@@ -350,7 +350,7 @@ func (em EngineMeta) MakeReqOpts() cdrclient.ReqOpts {
 type AgentServerOptions struct {
 	EngineMeta     EngineMeta
 	TestFileName   string
-	RunCommand     Command
+	StartCommand   Command
 	ExtraArgs      []string
 	StopCommand    *Command
 	MetricParser   func(string) (enginesModel.ShibuyaMetric, error)
