@@ -43,6 +43,7 @@ type AgentServer struct {
 	reqOpts         cdrclient.ReqOpts
 	reader          io.ReadCloser
 	writer          io.Writer
+	logger          *log.Entry
 }
 
 func NewAgentServer(opts AgentServerOptions) *AgentServer {
@@ -63,6 +64,7 @@ func NewAgentServer(opts AgentServerOptions) *AgentServer {
 		reqOpts:         opts.EngineMeta.MakeReqOpts(),
 		reader:          reader,
 		writer:          mw,
+		logger:          opts.Logger,
 	}
 	log.SetOutput(mw)
 	go as.listenForSubscribers()
@@ -95,13 +97,13 @@ func (as *AgentServer) listenForSubscribers() {
 			// A new client has connected.
 			// Register their message channel
 			as.clients[s] = struct{}{}
-			log.Printf("shibuya-agent: Metric subscriber added. %d registered subscribers", len(as.clients))
+			as.logger.Infof("Metric subscriber added. %d registered subscribers", len(as.clients))
 		case s := <-as.closingClients:
 			// A client has dettached and we want to
 			// stop sending them messages.
 			delete(as.clients, s)
 			close(s)
-			log.Printf("shibuya-agent: Metric subscriber removed. %d registered subscribers", len(as.clients))
+			as.logger.Infof("Metric subscriber removed. %d registered subscribers", len(as.clients))
 		case event := <-as.bus:
 			// We got a new event from the outside!
 			// Send eveent to all connected clients
@@ -124,12 +126,12 @@ func (as *AgentServer) tailFunc(filepath string) {
 		}
 		break
 	}
-	log.Printf("shibuya-agent: Start tailing result file %s", filepath)
+	as.logger.Infof("Start tailing result file %s", filepath)
 	for {
 		select {
 		case <-as.ctx.Done():
 			t.Stop()
-			log.Infof("shibuya-agent: Stop tailing the result file %s", filepath)
+			as.logger.Infof("Stop tailing the result file %s", filepath)
 			return
 		case line := <-t.Lines:
 			as.bus <- line.Text
@@ -214,7 +216,7 @@ func (as *AgentServer) SubscribeToCoordinator() (chan messages.Message, error) {
 		}
 		break
 	}
-	log.Infof("Subscribe to coordinator at %s", as.reqOpts.Endpoint)
+	as.logger.Infof("Subscribe to coordinator at %s", as.reqOpts.Endpoint)
 	return msgChan, nil
 }
 
@@ -229,16 +231,16 @@ func (as *AgentServer) finishCommand() {
 			}()
 			stopCommand := as.options.StopCommand
 			if stopCommand == nil && as.process != nil {
-				log.Infof("shibuya-agent: No stop command is provided. Going to kill the process %d", as.process.Pid)
+				as.logger.Infof("No stop command is provided. Going to kill the process %d", as.process.Pid)
 				if err := as.process.Kill(); err != nil {
-					log.Error(err)
+					as.logger.Error(err)
 				}
 				return
 			}
-			log.Printf("shibuya-agent: Shutting down process %d", as.process.Pid)
+			as.logger.Infof("Shutting down process %d", as.process.Pid)
 			cmd := stopCommand.ToExec(nil)
 			if err := cmd.Run(); err != nil {
-				log.Error(err)
+				as.logger.Error(err)
 			}
 			return
 		}
@@ -253,7 +255,7 @@ func (as *AgentServer) runCommand() error {
 	extraArgs := as.options.ExtraArgs
 	extraArgs = append(extraArgs, filename)
 	command := as.options.RunCommand.ToExec(extraArgs)
-	log.Infof("command is %s", command.String())
+	as.logger.Infof("command is %s", command.String())
 	command.Stderr = as.writer
 	if err := command.Start(); err != nil {
 		return err
@@ -312,7 +314,7 @@ func (as *AgentServer) ListenForEvents(msgChan chan messages.Message) {
 		switch pl.Verb {
 		case "start":
 			if err := as.handleStart(planMsg); err != nil {
-				log.Error(err)
+				as.logger.Error(err)
 			}
 		case "stop":
 			if as.cancel == nil {
@@ -351,13 +353,19 @@ type AgentServerOptions struct {
 	StopCommand    *Command
 	MetricParser   func(string) (enginesModel.ShibuyaMetric, error)
 	ResultFileFunc func(fileID int) string
+	Logger         *log.Entry
 }
 
 func StartAgentServer(options AgentServerOptions) (*AgentServer, error) {
+	if options.Logger == nil {
+		options.Logger = log.WithFields(log.Fields{
+			"Source": "shibuya-agent",
+		})
+	}
 	as := NewAgentServer(options)
 	go func() {
 		if err := as.reportOwnMetrics(5 * time.Second); err != nil {
-			log.Fatal(err)
+			options.Logger.Fatal(err)
 		}
 	}()
 	msgChan, err := as.SubscribeToCoordinator()
@@ -379,7 +387,7 @@ func StartAgentServer(options AgentServerOptions) (*AgentServer, error) {
 		},
 	})
 	if err := http.ListenAndServe(":8080", router.Mux()); err != nil {
-		log.Fatal(err)
+		options.Logger.Fatal(err)
 	}
 	return nil, nil
 }
