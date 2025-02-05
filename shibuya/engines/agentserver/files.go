@@ -10,19 +10,46 @@ const (
 	FILEMODE = 0700
 )
 
-var (
-	AGENT_ROOT       = os.Getenv("AGENT_ROOT")
-	RESULT_ROOT      = path.Join(AGENT_ROOT, "/test-result")
-	TEST_DATA_FOLDER = "/test-data"
+type (
+	AgentDir struct {
+		dir string
+	}
+	AgentDirectory       string
+	TestFilesDirectory   string
+	ResultFilesDirectory string
+	ConfFilesDirectory   string
 )
 
-func removePreviousData(folder string) error {
-	files, err := os.ReadDir(folder)
+func NewAgentDirHandler(dir string) AgentDir {
+	if dir == "" {
+		dir = os.Getenv("AGENT_ROOT")
+	}
+	return AgentDir{dir: dir}
+}
+
+func (af AgentDir) Dir() AgentDirectory {
+	return AgentDirectory(af.dir)
+}
+
+func (af AgentDir) TestFilesDir() TestFilesDirectory {
+	return TestFilesDirectory(path.Join("", "/test-data"))
+}
+
+func (af AgentDir) ConfFilesDir() ConfFilesDirectory {
+	return ConfFilesDirectory(path.Join(af.dir, "test-conf"))
+}
+
+func (af AgentDir) ResultFilesDir() ResultFilesDirectory {
+	return ResultFilesDirectory(path.Join(af.dir, "test-result"))
+}
+
+func (tf TestFilesDirectory) reset() error {
+	files, err := os.ReadDir(string(tf))
 	if err != nil {
 		return err
 	}
 	for _, file := range files {
-		f := path.Join(folder, file.Name())
+		f := path.Join(string(tf), file.Name())
 		if err := os.Remove(f); err != nil {
 			return err
 		}
@@ -30,14 +57,35 @@ func removePreviousData(folder string) error {
 	return nil
 }
 
-func saveToDisk(folder, filename string, file []byte) error {
-	filePath := filepath.Join(folder, filepath.Base(filename))
+func (tf TestFilesDirectory) saveFile(filename string, file []byte) error {
+	filePath := filepath.Join(string(tf), filepath.Base(filename))
 	if err := os.WriteFile(filePath, file, FILEMODE); err != nil {
 		return err
 	}
 	return nil
 }
 
-func makeFullResultPath(filename string) string {
-	return path.Join(RESULT_ROOT, filename)
+func join(parent string, subdirs ...string) string {
+	full := make([]string, len(subdirs)+1)
+	full[0] = parent
+	for i, item := range subdirs {
+		full[i+1] = item
+	}
+	return path.Join(full...)
+}
+
+func (af AgentDirectory) Filepath(sub ...string) string {
+	return join(string(af), sub...)
+}
+
+func (cf ConfFilesDirectory) Filepath(sub ...string) string {
+	return join(string(cf), sub...)
+}
+
+func (tf TestFilesDirectory) Filepath(sub ...string) string {
+	return join(string(tf), sub...)
+}
+
+func (rf ResultFilesDirectory) resultFile(sub ...string) string {
+	return join(string(rf), sub...)
 }
