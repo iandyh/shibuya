@@ -78,7 +78,7 @@ func main() {
 		MetricParser:   parseRawMetrics,
 		StopCommand:    stopCommand,
 		ExtraArgs:      []string{"-l"},
-		RunCommand:     startCommand,
+		StartCommand:   startCommand,
 		ResultFileFunc: findResultFile,
 	}
 	_, err := agentserver.StartAgentServer(options)
