@@ -251,7 +251,7 @@ func (as *AgentServer) runCommand() error {
 	// command will wait for the shutdown signal. Once it's done, the command
 	// func should finish
 	resultFileFunc := as.options.ResultFileFunc
-	filename := makeFullResultPath(resultFileFunc(as.fileId))
+	filename := testResultFolder.resultFile(resultFileFunc(as.fileId))
 	extraArgs := as.options.ExtraArgs
 	extraArgs = append(extraArgs, filename)
 	command := as.options.RunCommand.ToExec(extraArgs)
@@ -278,7 +278,7 @@ func (as *AgentServer) runCommand() error {
 }
 
 func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
-	if err := removePreviousData(TEST_DATA_FOLDER); err != nil {
+	if err := testFileFolder.reset(); err != nil {
 		return err
 	}
 	engineMeta := as.options.EngineMeta
@@ -291,7 +291,7 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 	if err != nil {
 		return err
 	}
-	if err := saveToDisk(TEST_DATA_FOLDER, as.options.TestFileName, content); err != nil {
+	if err := testFileFolder.saveFile(as.options.TestFileName, content); err != nil {
 		return err
 	}
 	for dt := range payload.DataFiles {
@@ -299,7 +299,7 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 		if err != nil {
 			return err
 		}
-		if err := saveToDisk(TEST_DATA_FOLDER, dt, content); err != nil {
+		if err := testFileFolder.saveFile(dt, content); err != nil {
 			return err
 		}
 	}

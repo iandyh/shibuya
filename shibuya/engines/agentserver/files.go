@@ -11,18 +11,24 @@ const (
 )
 
 var (
-	AGENT_ROOT       = os.Getenv("AGENT_ROOT")
-	RESULT_ROOT      = path.Join(AGENT_ROOT, "/test-result")
-	TEST_DATA_FOLDER = "/test-data"
+	AGENT_ROOT  = os.Getenv("AGENT_ROOT")
+	RESULT_ROOT = path.Join(AGENT_ROOT, "/test-result")
 )
 
-func removePreviousData(folder string) error {
-	files, err := os.ReadDir(folder)
+type TestFolder string
+
+var (
+	testFileFolder   = TestFolder("/test-data")
+	testResultFolder = TestFolder(RESULT_ROOT)
+)
+
+func (tf TestFolder) reset() error {
+	files, err := os.ReadDir(string(tf))
 	if err != nil {
 		return err
 	}
 	for _, file := range files {
-		f := path.Join(folder, file.Name())
+		f := path.Join(string(tf), file.Name())
 		if err := os.Remove(f); err != nil {
 			return err
 		}
@@ -30,14 +36,14 @@ func removePreviousData(folder string) error {
 	return nil
 }
 
-func saveToDisk(folder, filename string, file []byte) error {
-	filePath := filepath.Join(folder, filepath.Base(filename))
+func (tf TestFolder) saveFile(filename string, file []byte) error {
+	filePath := filepath.Join(string(tf), filepath.Base(filename))
 	if err := os.WriteFile(filePath, file, FILEMODE); err != nil {
 		return err
 	}
 	return nil
 }
 
-func makeFullResultPath(filename string) string {
+func (tf TestFolder) resultFile(filename string) string {
 	return path.Join(RESULT_ROOT, filename)
 }
