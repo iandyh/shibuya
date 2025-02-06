@@ -34,6 +34,7 @@ func (pm PlanMessage) String() string {
 
 type EngineMessage struct {
 	Verb      string              `json:"verb"`
+	RunID     int64               `json:"run_id"`
 	TestFile  string              `json:"test_file"`
 	DataFiles map[string]struct{} `json:"data_files"`
 }

@@ -108,6 +108,7 @@ func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Requ
 		payloadByPlan[planID] = &payload.EngineMessage{
 			Verb:      "start",
 			DataFiles: make(map[string]struct{}),
+			RunID:     enginesConfig[0].RunID,
 		}
 		p := planprogress.NewProgress(collectionID, planID, len(enginesConfig))
 		s.planProgress.Add(p)

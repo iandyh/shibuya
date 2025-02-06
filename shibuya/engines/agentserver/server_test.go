@@ -20,7 +20,6 @@ func startDummyAgent(startCommand agentserver.Command, stopCommand *agentserver.
 			CollectionID:  "",
 			PlanID:        "",
 			EngineID:      0,
-			RunID:         0,
 			APIKey:        "",
 		},
 	}

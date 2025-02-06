@@ -45,6 +45,7 @@ type AgentServer struct {
 	writer          io.Writer
 	logger          *log.Entry
 	angentDir       AgentDir
+	runID           int64
 }
 
 func NewAgentServer(opts AgentServerOptions) *AgentServer {
@@ -85,9 +86,7 @@ func (as *AgentServer) makePromMetrics(line string) {
 	metric.CollectionID = em.CollectionID
 	metric.PlanID = em.PlanID
 	metric.EngineID = fmt.Sprintf("%d", em.EngineID)
-
-	// TODO handle the run id here
-	metric.RunID = fmt.Sprintf("%d", em.RunID)
+	metric.RunID = fmt.Sprintf("%d", as.runID)
 
 	metric.ToPrometheus()
 }
@@ -249,7 +248,7 @@ func (as *AgentServer) finishCommand() {
 	}
 }
 
-func (as *AgentServer) runCommand() error {
+func (as *AgentServer) runCommand(runID int64) error {
 	// command will wait for the shutdown signal. Once it's done, the command
 	// func should finish
 	resultFileFunc := as.options.ResultFileFunc
@@ -266,6 +265,7 @@ func (as *AgentServer) runCommand() error {
 	as.process = command.Process
 	// Increase the fileid for next run
 	as.fileId += 1
+	as.runID = runID
 	go as.tailFunc(filename)
 	go as.finishCommand()
 	em := as.options.EngineMeta
@@ -305,7 +305,7 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 			return err
 		}
 	}
-	return as.runCommand()
+	return as.runCommand(payload.RunID)
 }
 
 func (as *AgentServer) ListenForEvents(msgChan chan messages.Message) {
@@ -336,7 +336,6 @@ type EngineMeta struct {
 	CollectionID  string
 	PlanID        string
 	EngineID      int
-	RunID         int
 	APIKey        string
 }
 
