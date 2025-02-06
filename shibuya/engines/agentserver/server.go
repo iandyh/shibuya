@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -46,6 +47,7 @@ type AgentServer struct {
 	logger          *log.Entry
 	angentDir       AgentDir
 	runID           int64
+	mu              sync.RWMutex
 }
 
 func NewAgentServer(opts AgentServerOptions) *AgentServer {
@@ -221,6 +223,23 @@ func (as *AgentServer) SubscribeToCoordinator() (chan messages.Message, error) {
 	return msgChan, nil
 }
 
+func (as *AgentServer) assignCtx(ctx context.Context, cancel context.CancelFunc) {
+	as.mu.Lock()
+	as.cancel = cancel
+	as.ctx = ctx
+	as.mu.Unlock()
+}
+
+func (as *AgentServer) stopTestByCancel() {
+	as.mu.RLock()
+	defer as.mu.RUnlock()
+
+	if as.cancel == nil {
+		return
+	}
+	as.cancel()
+}
+
 func (as *AgentServer) finishCommand() {
 	for {
 		select {
@@ -261,7 +280,8 @@ func (as *AgentServer) runCommand(runID int64) error {
 	if err := command.Start(); err != nil {
 		return err
 	}
-	as.ctx, as.cancel = context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	as.assignCtx(ctx, cancel)
 	as.process = command.Process
 	// Increase the fileid for next run
 	as.fileId += 1
@@ -319,14 +339,11 @@ func (as *AgentServer) ListenForEvents(msgChan chan messages.Message) {
 				as.logger.Error(err)
 			}
 		case "stop":
-			if as.cancel == nil {
-				continue
-			}
 			_, ok := pl.PlanMessage[engineMeta.PlanID]
 			if !ok {
 				continue
 			}
-			as.cancel()
+			as.stopTestByCancel()
 		}
 	}
 }
