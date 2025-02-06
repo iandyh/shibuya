@@ -42,7 +42,7 @@ jmeter_agent:
 
 .PHONY: jmeter_agent_image
 jmeter_agent_image: jmeter_agent
-	docker build -t $(img) -f Dockerfile.engines.jmeter .
+	docker build -t $(img) -f engines/jmeter/Dockerfile .
 	docker push $(img)
 
 .PHONY: coordinator_build
