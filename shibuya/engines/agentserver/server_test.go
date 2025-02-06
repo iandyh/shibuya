@@ -6,15 +6,11 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/engines/agentserver"
 )
 
-func findResultFile(fileID int) string {
-	return ""
-}
-
-func startDummyAgent(startCommand agentserver.Command, stopCommand *agentserver.Command) (*agentserver.AgentServer, error) {
+func startDummyAgent(startCommand agentserver.Command, stopCommand *agentserver.Command) error {
 	options := agentserver.AgentServerOptions{
-		StartCommand:   startCommand,
-		StopCommand:    stopCommand,
-		ResultFileFunc: findResultFile,
+		StartCommand: startCommand,
+		StopCommand:  stopCommand,
+		ResultFile:   "",
 		EngineMeta: agentserver.EngineMeta{
 			CoordinatorIP: "",
 			CollectionID:  "",
@@ -23,7 +19,8 @@ func startDummyAgent(startCommand agentserver.Command, stopCommand *agentserver.
 			APIKey:        "",
 		},
 	}
-	return agentserver.StartAgentServer(options)
+	as := agentserver.MakeAgentServer(options)
+	return as.Run()
 }
 
 type testcase struct {

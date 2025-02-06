@@ -91,7 +91,7 @@ func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Requ
 	formdata := r.MultipartForm
 	engineData := formdata.Value["engine_data"]
 
-	dataConfig := make(map[string][]*enginesModel.EngineDataConfig)
+	dataConfig := make(map[string]enginesModel.PlanEnginesConfig)
 	if err := json.Unmarshal([]byte(engineData[0]), &dataConfig); err != nil {
 		http.Error(w, "Error parsing JSON", http.StatusBadRequest)
 		return
@@ -103,7 +103,8 @@ func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Requ
 	planStorage := make(map[string]*storage.PlanFiles, len(dataConfig))
 	payloadByPlan := pl.PlanMessage
 	totalEngines := 0
-	for planID, enginesConfig := range dataConfig {
+	for planID, planConfig := range dataConfig {
+		enginesConfig := planConfig.EnginesConfig
 		planStorage[planID] = storage.NewPlanFiles("", collectionID, planID)
 		payloadByPlan[planID] = &payload.EngineMessage{
 			Verb:      "start",

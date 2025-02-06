@@ -8,6 +8,8 @@ go mod download
 case "$target" in
     "jmeter") GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o build/shibuya-agent $(pwd)/engines/jmeter/cmd
     ;;
+    "locust") GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o build/locust-agent $(pwd)/engines/locust/cmd
+    ;;
     "controller") GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o build/shibuya-controller $(pwd)/controller/cmd
     ;;
     "coordinator") GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o build/shibuya-coordinator $(pwd)/coordinator

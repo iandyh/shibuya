@@ -5,6 +5,8 @@ import (
 	"strconv"
 
 	"github.com/beevik/etree"
+	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
+	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
 )
 
 func getThreadGroups(planDoc *etree.Document) ([]*etree.Element, error) {
@@ -34,12 +36,12 @@ func parseTestPlan(file []byte) (*etree.Document, error) {
 	return doc, nil
 }
 
-func ModifyJMX(file []byte, threads, duration, rampTime string) ([]byte, error) {
+func modifyJMX(file []byte, pec enginesModel.PlanEnginesConfig) ([]byte, error) {
 	planDoc, err := parseTestPlan(file)
 	if err != nil {
 		return nil, err
 	}
-	durationInt, err := strconv.Atoi(duration)
+	durationInt, err := strconv.Atoi(pec.Duration)
 	if err != nil {
 		return nil, err
 	}
@@ -58,11 +60,22 @@ func ModifyJMX(file []byte, threads, duration, rampTime string) ([]byte, error) 
 			case "ThreadGroup.scheduler":
 				child.SetText("true")
 			case "ThreadGroup.num_threads":
-				child.SetText(threads)
+				child.SetText(pec.Concurrency)
 			case "ThreadGroup.ramp_time":
-				child.SetText(rampTime)
+				child.SetText(pec.Rampup)
 			}
 		}
 	}
 	return planDoc.WriteToBytes()
+}
+
+func MakeTestPlan(pf *storage.PlanFiles, planName, filename string, fileBytes []byte, pec enginesModel.PlanEnginesConfig) error {
+	modified, err := modifyJMX(fileBytes, pec)
+	if err != nil {
+		return err
+	}
+	if err := pf.StoreTestPlan(filename, modified); err != nil {
+		return err
+	}
+	return err
 }

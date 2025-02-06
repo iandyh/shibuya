@@ -38,7 +38,7 @@ func NewClient(httpClient *http.Client) *Client {
 }
 
 func (c *Client) TriggerCollection(ro ReqOpts, collection *model.Collection,
-	dataConfig map[int64][]*enginesModel.EngineDataConfig, plans []*model.Plan) error {
+	dataConfig map[int64]enginesModel.PlanEnginesConfig, plans []*model.Plan) error {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 	if err := prepareEngineData(writer, dataConfig); err != nil {
@@ -200,7 +200,7 @@ func handleResponse(resp *http.Response) error {
 	return nil
 }
 
-func prepareEngineData(writer *multipart.Writer, dataConfig map[int64][]*enginesModel.EngineDataConfig) error {
+func prepareEngineData(writer *multipart.Writer, dataConfig map[int64]enginesModel.PlanEnginesConfig) error {
 	payload, err := json.Marshal(dataConfig)
 	if err != nil {
 		return nil

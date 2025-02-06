@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	es "github.com/iandyh/eventsource"
 	"github.com/rakutentech/shibuya/shibuya/client"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	log "github.com/sirupsen/logrus"
@@ -78,13 +79,13 @@ func (rm *resourceManager) createProject() (*model.Project, error) {
 	return project, nil
 }
 
-func (rm *resourceManager) createPlan(projectID string) (*model.Plan, error) {
+func (rm *resourceManager) createPlan(projectID string, kind model.PlanKind, planFile string) (*model.Plan, error) {
 	pc := rm.planClient
-	plan, err := pc.Create(projectID, "plan1")
+	plan, err := pc.Create(projectID, "plan1", kind)
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.Open("sample.jmx")
+	file, err := os.Open(planFile)
 	if err != nil {
 		return nil, err
 	}
@@ -105,21 +106,17 @@ func (rm *resourceManager) createCollection(projectID string) (*model.Collection
 	return collection, nil
 }
 
-func (rm *resourceManager) prepareResources() (*model.Project, *model.Collection, *model.Plan, error) {
-	project, err := rm.projectClient.Create("test1", "shibuya")
-	if err != nil {
-		return nil, nil, nil, err
-	}
+func (rm *resourceManager) prepareResources(project *model.Project, kind model.PlanKind, planFile string) (*model.Collection, *model.Plan, error) {
 	projectID := fmt.Sprintf("%d", project.ID)
-	plan, err := rm.createPlan(projectID)
+	plan, err := rm.createPlan(projectID, kind, planFile)
 	if err != nil {
-		return project, nil, nil, err
+		return nil, nil, err
 	}
 	collection, err := rm.createCollection(projectID)
 	if err != nil {
-		return project, nil, plan, nil
+		return nil, plan, nil
 	}
-	return project, collection, plan, nil
+	return collection, plan, nil
 }
 
 // In this test, we create a project, collection and a plan first
@@ -128,94 +125,123 @@ func (rm *resourceManager) prepareResources() (*model.Project, *model.Collection
 func TestFullAPI(t *testing.T) {
 	endpoint := "http://localhost:8080"
 	rm := newResourceManager(endpoint)
-	project, collection, plan, err := rm.prepareResources()
-	defer func() {
-		if err := rm.collectionClient.Delete(collection.ID); err != nil {
-			t.Fatal(err)
-		}
-		log.Infof("Removed collection %d", collection.ID)
-
-		if err := rm.planClient.Delete(plan.ID); err != nil {
-			t.Fatal(err)
-		}
-		log.Infof("Removed plan %d", plan.ID)
-
-		if err := rm.projectClient.Delete(project.ID); err != nil {
-			t.Fatal(err)
-		}
-		log.Infof("Removed project %d", project.ID)
-	}()
-	cc := rm.collectionClient
-	testcases := []string{"testcasea", "testcaseb"}
-	// The number of engines should be equal to the number of test cases above
-	// Because in the following test, we are going to test csv_split case and we want to check
-	// the data has been evently dispatched to all engines. With 2 engines, we expect each engine
-	// gets 1 test case
-	collectionConfigurationFile, err := rm.prepareCollectionConfiguration(project, collection, plan,
-		len(testcases))
+	project, err := rm.createProject()
 	assert.Nil(t, err)
-	defer os.Remove(collectionConfigurationFile.Name())
 
-	content, err := os.Open(collectionConfigurationFile.Name())
-	err = cc.Configure(collection.ID, content)
-	assert.NoError(t, err)
-
-	dataFile, err := os.Open("testcases.csv")
-	assert.Nil(t, err)
-	err = cc.UploadFile(collection.ID, dataFile)
-	assert.Nil(t, err)
-	err = cc.Launch(collection.ID)
-	triggerable := false
-	timeout := time.Duration(20 * time.Second)
-waitLoop:
-	for {
-		select {
-		case <-time.After(timeout):
-			break waitLoop
-		default:
-			time.Sleep(1 * time.Second)
-			cs, err := cc.Status(collection.ID)
-			if err != nil {
-				continue waitLoop
-			}
-			if cs.CanBeTriggered() {
-				triggerable = true
-				break waitLoop
-			}
-		}
-	}
-	if !triggerable {
-		t.Fatalf("Engines could not be ready after %v", timeout)
-	}
-	err = cc.Trigger(collection.ID)
-	assert.NoError(t, err)
-	stream, cancel, err := cc.Subscribe(collection.ID)
-	assert.Nil(t, err)
-	notSeen := make(map[string]struct{})
-	for _, testcase := range testcases {
-		notSeen[testcase] = struct{}{}
-	}
-	for e := range stream.Events {
-		assert.NotEmpty(t, e.Data())
+	checkMetricsFunc := func(stream *es.Stream, testcases []string, t *testing.T) {
+		notSeen := make(map[string]struct{})
 		for _, testcase := range testcases {
-			if strings.Contains(e.Data(), testcase) {
-				delete(notSeen, testcase)
-				break
+			notSeen[testcase] = struct{}{}
+		}
+		for e := range stream.Events {
+			assert.NotEmpty(t, e.Data())
+			for _, testcase := range testcases {
+				if strings.Contains(e.Data(), testcase) {
+					delete(notSeen, testcase)
+					break
+				}
+			}
+			if len(notSeen) == 0 {
+				return
 			}
 		}
-		if len(notSeen) == 0 {
-			cancel()
-			break
-		}
 	}
-	cc.Purge(collection.ID)
-	time.Sleep(5 * time.Second)
+	testsByPlanKind := []struct {
+		kind      model.PlanKind
+		planFile  string
+		testcases []string
+	}{
+		{
+			kind:      model.JmeterPlan,
+			planFile:  "sample.jmx",
+			testcases: []string{"testcasea", "testcaseb"},
+		},
+		{
+			kind:      model.LocustPlan,
+			planFile:  "locustfile.py",
+			testcases: []string{"plan1"},
+		},
+	}
+	for _, tc := range testsByPlanKind {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			collection, plan, err := rm.prepareResources(project, tc.kind, tc.planFile)
+			assert.Nil(t, err)
+			defer func() {
+				if err := rm.collectionClient.Delete(collection.ID); err != nil {
+					t.Fatal(err)
+				}
+				log.Infof("Removed collection %d", collection.ID)
+
+				if err := rm.planClient.Delete(plan.ID); err != nil {
+					t.Fatal(err)
+				}
+				log.Infof("Removed plan %d", plan.ID)
+			}()
+			cc := rm.collectionClient
+			// The number of engines should be equal to the number of test cases above
+			// Because in the following test, we are going to test csv_split case and we want to check
+			// the data has been evently dispatched to all engines. With 2 engines, we expect each engine
+			// gets 1 test case
+			collectionConfigurationFile, err := rm.prepareCollectionConfiguration(project, collection, plan,
+				2)
+			assert.Nil(t, err)
+			defer os.Remove(collectionConfigurationFile.Name())
+
+			content, err := os.Open(collectionConfigurationFile.Name())
+			err = cc.Configure(collection.ID, content)
+			assert.NoError(t, err)
+
+			dataFile, err := os.Open("testcases.csv")
+			assert.Nil(t, err)
+			err = cc.UploadFile(collection.ID, dataFile)
+			assert.Nil(t, err)
+			err = cc.Launch(collection.ID)
+			triggerable := false
+			timeout := time.Duration(20 * time.Second)
+		waitLoop:
+			for {
+				select {
+				case <-time.After(timeout):
+					break waitLoop
+				default:
+					time.Sleep(1 * time.Second)
+					cs, err := cc.Status(collection.ID)
+					if err != nil {
+						continue waitLoop
+					}
+					if cs.CanBeTriggered() {
+						triggerable = true
+						break waitLoop
+					}
+				}
+			}
+			if !triggerable {
+				t.Fatalf("Engines could not be ready after %v", timeout)
+			}
+			err = cc.Trigger(collection.ID)
+			assert.NoError(t, err)
+			stream, cancel, err := cc.Subscribe(collection.ID)
+			assert.Nil(t, err)
+			checkMetricsFunc(stream, tc.testcases, t)
+			cancel()
+			cc.Purge(collection.ID)
+			time.Sleep(5 * time.Second)
+		})
+		defer func() {
+			if err := rm.projectClient.Delete(project.ID); err != nil {
+				t.Fatal(err)
+			}
+			log.Infof("Removed project %d", project.ID)
+		}()
+	}
 }
 
 func TestObjectCRUD(t *testing.T) {
 	endpoint := "http://localhost:8080"
 	rm := newResourceManager(endpoint)
-	project, collection, plan, err := rm.prepareResources()
+	project, err := rm.createProject()
+	assert.Nil(t, err)
+	collection, plan, err := rm.prepareResources(project, model.JmeterPlan, "sample.jmx")
 	defer func() {
 		rm.collectionClient.Delete(collection.ID)
 		rm.planClient.Delete(plan.ID)

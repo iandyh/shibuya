@@ -50,7 +50,7 @@ func (tf TestFilesDirectory) reset() error {
 	}
 	for _, file := range files {
 		f := path.Join(string(tf), file.Name())
-		if err := os.Remove(f); err != nil {
+		if err := os.RemoveAll(f); err != nil {
 			return err
 		}
 	}
@@ -59,6 +59,14 @@ func (tf TestFilesDirectory) reset() error {
 
 func (tf TestFilesDirectory) saveFile(filename string, file []byte) error {
 	filePath := filepath.Join(string(tf), filepath.Base(filename))
+	if err := os.WriteFile(filePath, file, FILEMODE); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (cf ConfFilesDirectory) saveFile(filename string, file []byte) error {
+	filePath := filepath.Join(string(cf), filepath.Base(filename))
 	if err := os.WriteFile(filePath, file, FILEMODE); err != nil {
 		return err
 	}
@@ -86,6 +94,15 @@ func (tf TestFilesDirectory) Filepath(sub ...string) string {
 	return join(string(tf), sub...)
 }
 
-func (rf ResultFilesDirectory) resultFile(sub ...string) string {
+func (rf ResultFilesDirectory) ResultFile(sub ...string) string {
 	return join(string(rf), sub...)
+}
+
+func (rf ResultFilesDirectory) exists(filepath string) bool {
+	_, err := os.Stat(filepath)
+	return !os.IsNotExist(err)
+}
+
+func (rf ResultFilesDirectory) remove(filepath string) error {
+	return os.Remove(filepath)
 }

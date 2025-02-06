@@ -1,35 +1,68 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
-	mysql "github.com/go-sql-driver/mysql"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
 	log "github.com/sirupsen/logrus"
 )
 
-type Plan struct {
-	ID          int64          `json:"id"`
-	Name        string         `json:"name"`
-	ProjectID   int64          `json:"project_id"`
-	CreatedTime time.Time      `json:"created_time"`
-	TestFile    *ShibuyaFile   `json:"test_file"`
-	Data        []*ShibuyaFile `json:"data"`
+type (
+	PlanKind string
+	Plan     struct {
+		ID          int64          `json:"id"`
+		Name        string         `json:"name"`
+		Kind        PlanKind       `json:"kind"`
+		ProjectID   int64          `json:"project_id"`
+		CreatedTime time.Time      `json:"created_time"`
+		TestFile    *ShibuyaFile   `json:"test_file"`
+		Data        []*ShibuyaFile `json:"data"`
+	}
+)
+
+const (
+	JmeterPlan = PlanKind("jmeter")
+	LocustPlan = PlanKind("locust")
+)
+
+var (
+	SupportedKinds  = []PlanKind{JmeterPlan, LocustPlan}
+	ValidExtensions = map[PlanKind]string{
+		JmeterPlan: ".jmx",
+		LocustPlan: ".py",
+	}
+	TestFileExtensions = func() []string {
+		t := make([]string, len(ValidExtensions))
+		i := 0
+		for _, v := range ValidExtensions {
+			t[i] = v
+			i += 1
+		}
+		return t
+	}()
+)
+
+func (pk PlanKind) IsSupported() bool {
+	for _, item := range SupportedKinds {
+		if item == pk {
+			return true
+		}
+	}
+	return false
 }
 
-func CreatePlan(name string, projectID int64) (int64, error) {
+func CreatePlan(name string, projectID int64, kind PlanKind) (int64, error) {
 	db := getDB()
-	q, err := db.Prepare("insert plan set name=?,project_id=?")
+	q, err := db.Prepare("insert plan set name=?,project_id=?,kind=?")
 	if err != nil {
 		return 0, err
 	}
 	defer q.Close()
 
-	r, err := q.Exec(name, projectID)
+	r, err := q.Exec(name, projectID, kind)
 	if err != nil {
 		return 0, err
 	}
@@ -39,14 +72,14 @@ func CreatePlan(name string, projectID int64) (int64, error) {
 
 func GetPlan(ID int64) (*Plan, error) {
 	db := getDB()
-	q, err := db.Prepare("select id, name, project_id, created_time from plan where id=?")
+	q, err := db.Prepare("select id, name, kind, project_id, created_time from plan where id=?")
 	if err != nil {
 		return nil, err
 	}
 	defer q.Close()
 
 	plan := new(Plan)
-	err = q.QueryRow(ID).Scan(&plan.ID, &plan.Name, &plan.ProjectID, &plan.CreatedTime)
+	err = q.QueryRow(ID).Scan(&plan.ID, &plan.Name, &plan.Kind, &plan.ProjectID, &plan.CreatedTime)
 	if err != nil {
 		return nil, &DBError{Err: err, Message: "plan not found"}
 	}
@@ -95,6 +128,10 @@ func (p *Plan) GetPlanFiles() (*ShibuyaFile, []*ShibuyaFile, error) {
 	return t, r, nil
 }
 
+func (p *Plan) IsThePlanFileValid(filename string) bool {
+	return strings.HasSuffix(filename, ValidExtensions[p.Kind])
+}
+
 func (p *Plan) Delete(objStorage object_storage.StorageInterface) error {
 	if err := p.DeleteAllFiles(objStorage); err != nil {
 		return err
@@ -116,23 +153,29 @@ func (p *Plan) MakeFileName(filename string) string {
 	return fmt.Sprintf("plan/%d/%s", p.ID, filename)
 }
 
+func (p *Plan) IsTestFile(filename string) bool {
+	isTestFile := false
+	for _, e := range TestFileExtensions {
+		if strings.HasSuffix(filename, e) {
+			isTestFile = true
+		}
+	}
+	return isTestFile
+}
+
 func (p *Plan) StoreFile(objStorage object_storage.StorageInterface, content io.ReadCloser, filename string) error {
-	filenameForStorage := p.MakeFileName(filename)
 	table := "plan_data"
-	if strings.HasSuffix(filename, ".jmx") {
+	if p.IsTestFile(filename) {
 		table = "plan_test_file"
 	}
+	filenameForStorage := p.MakeFileName(filename)
 	db := getDB()
 	q, err := db.Prepare(fmt.Sprintf("insert into %s (plan_id, filename) values (?, ?)", table))
 	if err != nil {
 		return err
 	}
 	defer q.Close()
-	_, err = q.Exec(p.ID, filename)
-	if driverErr, ok := err.(*mysql.MySQLError); ok {
-		if driverErr.Number == 1062 {
-			return errors.New("File already exists. If you wish to update it then delete existing one and upload again.")
-		}
+	if _, err = q.Exec(p.ID, filename); err != nil {
 		return err
 	}
 	return objStorage.Upload(filenameForStorage, content)
@@ -140,7 +183,7 @@ func (p *Plan) StoreFile(objStorage object_storage.StorageInterface, content io.
 
 func (p *Plan) DeleteFile(objStorage object_storage.StorageInterface, filename string) error {
 	table := "plan_data"
-	if strings.HasSuffix(filename, ".jmx") {
+	if p.IsTestFile(filename) {
 		table = "plan_test_file"
 	}
 	db := getDB()

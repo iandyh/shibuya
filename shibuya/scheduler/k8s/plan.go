@@ -18,14 +18,13 @@ type planResource struct {
 	projectID, collectionID, planID int64
 }
 
-func (plan planResource) makePlanDeployment(replicas int, serviceIP string, sc config.ShibuyaConfig,
-) *appsv1.StatefulSet {
+func (plan planResource) makePlanDeployment(replicas int, serviceIP string,
+	sc config.ShibuyaConfig, containerConfig *config.ExecutorContainer) *appsv1.StatefulSet {
 	planName := plan.makeName()
 	envvars := plan.makeEngineMetaEnvvars(serviceIP)
 	labels := plan.makePlanLabel()
 	affinity := prepareAffinity(plan.collectionID, sc.ExecutorConfig.NodeAffinity)
 	tolerations := prepareTolerations(sc.ExecutorConfig.Tolerations)
-	executorConfig := sc.ExecutorConfig.JmeterContainer.ExecutorContainer
 	t := true
 	sts := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -57,17 +56,17 @@ func (plan planResource) makePlanDeployment(replicas int, serviceIP string, sc c
 					Containers: []apiv1.Container{
 						{
 							Name:            planName,
-							Image:           executorConfig.Image,
+							Image:           containerConfig.Image,
 							ImagePullPolicy: sc.ExecutorConfig.ImagePullPolicy,
 							Env:             envvars,
 							Resources: apiv1.ResourceRequirements{
 								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(executorConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(executorConfig.Mem),
+									apiv1.ResourceCPU:    resource.MustParse(containerConfig.CPU),
+									apiv1.ResourceMemory: resource.MustParse(containerConfig.Mem),
 								},
 								Requests: apiv1.ResourceList{
-									apiv1.ResourceCPU:    resource.MustParse(executorConfig.CPU),
-									apiv1.ResourceMemory: resource.MustParse(executorConfig.Mem),
+									apiv1.ResourceCPU:    resource.MustParse(containerConfig.CPU),
+									apiv1.ResourceMemory: resource.MustParse(containerConfig.Mem),
 								},
 							},
 							Ports: []apiv1.ContainerPort{
