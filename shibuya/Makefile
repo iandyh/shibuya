@@ -49,7 +49,7 @@ jmeter_agent_image: jmeter_agent
 coordinator_build:
 	sh build.sh coordinator
 
-.PHONY coordinator_image
+.PHONY: coordinator_image
 coordinator_image: base_image coordinator_build
 	docker build -t $(img) -f coordinator/Dockerfile --build-arg="binary_name=shibuya-coordinator" .
 	docker push $(img)
