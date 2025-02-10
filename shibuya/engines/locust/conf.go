@@ -30,6 +30,10 @@ func writeConfig(filepath string, pec enginesModel.PlanEnginesConfig) error {
 	if err != nil {
 		return err
 	}
+	// by default, locust set the spawn rate to 1
+	if pec.Rampup == "0" {
+		pec.Rampup = "1"
+	}
 	t, err := template.New("locust").Parse(tmpl)
 	if err != nil {
 		return err
