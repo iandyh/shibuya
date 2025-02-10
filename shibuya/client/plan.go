@@ -21,11 +21,12 @@ func NewPlanClient(clientOpts *ClientOpts) *PlanClient {
 	}
 }
 
-func (pc *PlanClient) Create(projectID, name string) (*model.Plan, error) {
+func (pc *PlanClient) Create(projectID, name string, kind model.PlanKind) (*model.Plan, error) {
 	resourceUrl := pc.ResourceUrl(pc.Endpoint, "")
 	params := map[string]string{
 		"project_id": projectID,
 		"name":       name,
+		"kind":       string(kind),
 	}
 	return sendCreateRequest(pc.Client, resourceUrl, params, &model.Plan{})
 }

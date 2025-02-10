@@ -78,6 +78,10 @@ runtime:
       image: shibuya:jmeter
       cpu: 1
       mem: 1Gi
+    locust:
+      image: shibuya:locust
+      cpu: 1
+      mem: 1Gi
     pull_secret: ""
     pull_policy: "IfNotPresent"
     node_affinity: []

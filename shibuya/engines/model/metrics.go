@@ -83,10 +83,7 @@ var (
 
 func (edc *EngineDataConfig) deepCopy() *EngineDataConfig {
 	edcCopy := EngineDataConfig{
-		EngineData:  map[string]*model.ShibuyaFile{},
-		Duration:    edc.Duration,
-		Concurrency: edc.Concurrency,
-		Rampup:      edc.Rampup,
+		EngineData: map[string]*model.ShibuyaFile{},
 	}
 	for filename, ed := range edc.EngineData {
 		sf := model.ShibuyaFile{

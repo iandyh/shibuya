@@ -76,7 +76,7 @@ func (kcm *K8sClientManager) getRandomHostIP() (string, error) {
 
 func (kcm *K8sClientManager) DeployPlan(projectID, collectionID, planID int64, enginesNo int, serviceIP string, containerconfig *config.ExecutorContainer) error {
 	pr := planResource{projectID, collectionID, planID}
-	planSts := pr.makePlanDeployment(enginesNo, serviceIP, kcm.sc)
+	planSts := pr.makePlanDeployment(enginesNo, serviceIP, kcm.sc, containerconfig)
 	if _, err := kcm.client.AppsV1().StatefulSets(kcm.Namespace).Create(context.TODO(), planSts, metav1.CreateOptions{}); err != nil {
 		return err
 	}

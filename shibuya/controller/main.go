@@ -61,7 +61,7 @@ func NewController(sc config.ShibuyaConfig) *Controller {
 type subscribeState struct {
 	cancelfunc     context.CancelFunc
 	ctx            context.Context
-	readingEngines []shibuyaEngine
+	readingEngines []*Engine
 	readyToClose   chan struct{}
 }
 
@@ -115,11 +115,11 @@ func (c *Controller) handleStreamForClient(item *ApiMetricStream) error {
 		readyToClose:   make(chan struct{}),
 	}
 	c.readingEngineRecords.Store(item.ClientID, ss)
-	go func(readingEngines []shibuyaEngine) {
+	go func(readingEngines []*Engine) {
 		var wg sync.WaitGroup
 		for _, engine := range readingEngines {
 			wg.Add(1)
-			go func(e shibuyaEngine) {
+			go func(e *Engine) {
 				defer wg.Done()
 				for {
 					select {
@@ -164,7 +164,7 @@ func (c *Controller) streamToApi() {
 			if t, ok := c.readingEngineRecords.Load(clientID); ok {
 				ss := t.(subscribeState)
 				for _, e := range ss.readingEngines {
-					go func(e shibuyaEngine) {
+					go func(e *Engine) {
 						e.closeStream()
 					}(e)
 				}

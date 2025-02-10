@@ -34,10 +34,17 @@ data:
             },
             "in_cluster": {{ .Values.runtime.executors.in_cluster }},
             "namespace": {{ .Values.runtime.executors.namespace | quote }},
-            "jmeter": {
-                "image": {{ .Values.runtime.executors.jmeter.image | quote }},
-                "cpu": {{ .Values.runtime.executors.jmeter.cpu | quote }},
-                "mem": {{ .Values.runtime.executors.jmeter.mem | quote }}
+            "engines_container": {
+                "jmeter": {
+                    "image": {{ .Values.runtime.executors.jmeter.image | quote }},
+                    "cpu": {{ .Values.runtime.executors.jmeter.cpu | quote }},
+                    "mem": {{ .Values.runtime.executors.jmeter.mem | quote }}
+                },
+                "locust": {
+                    "image": {{ .Values.runtime.executors.locust.image | quote }},
+                    "cpu": {{ .Values.runtime.executors.locust.cpu | quote }},
+                    "mem": {{ .Values.runtime.executors.locust.mem | quote }}
+                }
             },
             "pull_secret": {{ .Values.runtime.executors.pull_secret | quote }},
             "pull_policy": {{ .Values.runtime.executors.pull_policy | quote }}

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -106,14 +107,14 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 			return err
 		}
 		if plan.TestFile == nil {
-			return fmt.Errorf("Triggering plan aborted. There is no Test file (.jmx) in this plan %d", plan.ID)
+			return fmt.Errorf("Triggering plan aborted. There is no Test file in this plan %d", plan.ID)
 		}
 	}
 	runID, err := collection.StartRun()
 	if err != nil {
 		return err
 	}
-	planEngineDataConfigs := make(map[int64][]*enginesModel.EngineDataConfig, len(collection.ExecutionPlans))
+	planEngineDataConfigs := make(map[int64]enginesModel.PlanEnginesConfig, len(collection.ExecutionPlans))
 	plans := make([]*model.Plan, len(collection.ExecutionPlans))
 	for i, ep := range collection.ExecutionPlans {
 		pc := NewPlanController(ep, collection, c.Scheduler, c.httpClient, c.sc)
@@ -130,7 +131,15 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 			return err
 		}
 		plans[i] = plan
-		planEngineDataConfigs[ep.PlanID] = planEngineDataConfig
+		pec := enginesModel.PlanEnginesConfig{
+			Kind:          plan.Kind,
+			Name:          plan.Name,
+			Duration:      strconv.Itoa(ep.Duration),
+			Concurrency:   strconv.Itoa(ep.Concurrency),
+			Rampup:        strconv.Itoa(ep.Rampup),
+			EnginesConfig: planEngineDataConfig,
+		}
+		planEngineDataConfigs[ep.PlanID] = pec
 	}
 	ingressIP, err := c.Scheduler.GetIngressUrl(collection.ProjectID)
 	if err != nil {
@@ -262,13 +271,13 @@ func (c *Controller) CollectionStatus(collection *model.Collection) (*smodel.Col
 	return cs, nil
 }
 
-func (c *Controller) SubscribeCollection(collection *model.Collection) ([]shibuyaEngine, error) {
+func (c *Controller) SubscribeCollection(collection *model.Collection) ([]*Engine, error) {
 	eps, err := collection.GetExecutionPlans()
 	if err != nil {
 		return nil, err
 	}
 	var wg sync.WaitGroup
-	connectedEngines := []shibuyaEngine{}
+	connectedEngines := []*Engine{}
 	for _, executionPlan := range eps {
 		wg.Add(1)
 		go func(ep *model.ExecutionPlan) {

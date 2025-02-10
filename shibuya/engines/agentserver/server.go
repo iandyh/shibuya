@@ -35,7 +35,6 @@ type AgentServer struct {
 	closingClients  chan chan string
 	clients         map[chan string]struct{}
 	bus             chan string
-	fileId          int
 	process         *os.Process
 	ctx             context.Context
 	cancel          context.CancelFunc
@@ -72,7 +71,6 @@ func NewAgentServer(opts AgentServerOptions) *AgentServer {
 		angentDir:       NewAgentDirHandler(""),
 	}
 	log.SetOutput(mw)
-	go as.listenForSubscribers()
 	return as
 }
 
@@ -93,7 +91,7 @@ func (as *AgentServer) makePromMetrics(line string) {
 	metric.ToPrometheus()
 }
 
-func (as *AgentServer) listenForSubscribers() {
+func (as *AgentServer) handleMetricStream() {
 	for {
 		select {
 		case s := <-as.incomingClients:
@@ -258,7 +256,7 @@ func (as *AgentServer) finishCommand() {
 				return
 			}
 			as.logger.Infof("Shutting down process %d", as.process.Pid)
-			cmd := stopCommand.ToExec(nil)
+			cmd := stopCommand.ToExec()
 			if err := cmd.Run(); err != nil {
 				as.logger.Error(err)
 			}
@@ -270,11 +268,14 @@ func (as *AgentServer) finishCommand() {
 func (as *AgentServer) runCommand(runID int64) error {
 	// command will wait for the shutdown signal. Once it's done, the command
 	// func should finish
-	resultFileFunc := as.options.ResultFileFunc
-	filename := as.angentDir.ResultFilesDir().resultFile(resultFileFunc(as.fileId))
-	extraArgs := as.options.ExtraArgs
-	extraArgs = append(extraArgs, filename)
-	command := as.options.StartCommand.ToExec(extraArgs)
+	resultDir := as.angentDir.ResultFilesDir()
+	resultFile := as.options.ResultFile
+	if resultDir.exists(resultFile) {
+		if err := resultDir.remove(resultFile); err != nil {
+			return err
+		}
+	}
+	command := as.options.StartCommand.ToExec()
 	as.logger.Infof("command is %s", command.String())
 	command.Stderr = as.writer
 	if err := command.Start(); err != nil {
@@ -283,10 +284,8 @@ func (as *AgentServer) runCommand(runID int64) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	as.assignCtx(ctx, cancel)
 	as.process = command.Process
-	// Increase the fileid for next run
-	as.fileId += 1
 	as.runID = runID
-	go as.tailFunc(filename)
+	go as.tailFunc(resultFile)
 	go as.finishCommand()
 	em := as.options.EngineMeta
 	as.cdrclient.ReportProgress(as.options.EngineMeta.MakeReqOpts(),
@@ -316,6 +315,15 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 	if err := as.angentDir.TestFilesDir().saveFile(as.options.TestFileName, content); err != nil {
 		return err
 	}
+	if as.options.ConfFileName != "" {
+		content, err := client.FetchFile(as.reqOpts, pf.TestFilePath(as.options.ConfFileName))
+		if err != nil {
+			return err
+		}
+		if err := as.angentDir.ConfFilesDir().saveFile(as.options.ConfFileName, content); err != nil {
+			return err
+		}
+	}
 	for dt := range payload.DataFiles {
 		content, err := client.FetchFile(as.reqOpts, pf.EngineDataPath(dt, engineID))
 		if err != nil {
@@ -328,7 +336,7 @@ func (as *AgentServer) handleStart(payload *payload.EngineMessage) error {
 	return as.runCommand(payload.RunID)
 }
 
-func (as *AgentServer) ListenForEvents(msgChan chan messages.Message) {
+func (as *AgentServer) listenToCoordinator(msgChan chan messages.Message) {
 	engineMeta := as.options.EngineMeta
 	for msg := range msgChan {
 		pl := msg.(*payload.Payload)
@@ -364,33 +372,27 @@ func (em EngineMeta) MakeReqOpts() cdrclient.ReqOpts {
 }
 
 type AgentServerOptions struct {
-	EngineMeta     EngineMeta
-	TestFileName   string
-	StartCommand   Command
-	ExtraArgs      []string
-	StopCommand    *Command
-	MetricParser   func(string) (enginesModel.ShibuyaMetric, error)
-	ResultFileFunc func(fileID int) string
-	Logger         *log.Entry
+	EngineMeta   EngineMeta
+	TestFileName string
+	StartCommand Command
+	StopCommand  *Command
+	MetricParser func(string) (enginesModel.ShibuyaMetric, error)
+	ResultFile   string
+	Logger       *log.Entry
+	ConfFileName string
 }
 
-func StartAgentServer(options AgentServerOptions) (*AgentServer, error) {
+func MakeAgentServer(options AgentServerOptions) *AgentServer {
 	if options.Logger == nil {
 		options.Logger = log.WithFields(log.Fields{
 			"Source": "shibuya-agent",
 		})
 	}
 	as := NewAgentServer(options)
-	go func() {
-		if err := as.reportOwnMetrics(5 * time.Second); err != nil {
-			options.Logger.Fatal(err)
-		}
-	}()
-	msgChan, err := as.SubscribeToCoordinator()
-	if err != nil {
-		return nil, err
-	}
-	go as.ListenForEvents(msgChan)
+	return as
+}
+
+func (as *AgentServer) HTTPRouter() *httproute.Router {
 	router := httproute.NewRouter("agent http endpoints", "")
 	router.AddRoutes(httproute.Routes{
 		{
@@ -404,10 +406,27 @@ func StartAgentServer(options AgentServerOptions) (*AgentServer, error) {
 			HandlerFunc: promhttp.Handler().ServeHTTP,
 		},
 	})
-	if err := http.ListenAndServe(":8080", router.Mux()); err != nil {
-		options.Logger.Fatal(err)
+	return router
+}
+
+func (as *AgentServer) Run() error {
+	options := as.options
+	go func() {
+		if err := as.reportOwnMetrics(5 * time.Second); err != nil {
+			options.Logger.Fatal(err)
+		}
+	}()
+	msgChan, err := as.SubscribeToCoordinator()
+	if err != nil {
+		return err
 	}
-	return nil, nil
+	go as.listenToCoordinator(msgChan)
+	go as.handleMetricStream()
+	router := as.HTTPRouter()
+	if err := http.ListenAndServe(":8080", router.Mux()); err != nil {
+		return err
+	}
+	return nil
 }
 
 func FetchEngineMeta() EngineMeta {

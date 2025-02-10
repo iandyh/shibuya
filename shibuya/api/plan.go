@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/rakutentech/shibuya/shibuya/config"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
@@ -100,7 +101,17 @@ func (pa *PlanAPI) planCreateHandler(w http.ResponseWriter, r *http.Request) {
 		handleErrors(w, makeInvalidRequestError("plan name cannot be empty"))
 		return
 	}
-	planID, err := model.CreatePlan(name, project.ID)
+	kind := r.Form.Get("kind")
+	if kind == "" {
+		handleErrors(w, makeInvalidRequestError("kind cannot be empty"))
+		return
+	}
+	pk := model.PlanKind(kind)
+	if !pk.IsSupported() {
+		handleErrors(w, makeInvalidRequestError("invalid kind"))
+		return
+	}
+	planID, err := model.CreatePlan(name, project.ID, pk)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -165,10 +176,20 @@ func (pa *PlanAPI) planFilesUploadHandler(w http.ResponseWriter, r *http.Request
 		handleErrors(w, makeInvalidRequestError("Something wrong with file you uploaded"))
 		return
 	}
+	if plan.IsTestFile(handler.Filename) && !plan.IsThePlanFileValid(handler.Filename) {
+		handleErrors(w, makeInvalidRequestError("Wrong file for the plan"))
+		return
+	}
 	err = plan.StoreFile(pa.objStorage, file, handler.Filename)
 	if err != nil {
 		// TODO need to handle the upload error here
-		handleErrors(w, err)
+		if driverErr, ok := err.(*mysql.MySQLError); ok {
+			if driverErr.Number == 1062 {
+				handleErrors(w, makeInvalidRequestError("File already exists. If you wish to update it then delete existing one and upload again."))
+				return
+			}
+		}
+		handleErrors(w, makeInternalServerError(err.Error()))
 		return
 	}
 	w.Write([]byte("success"))

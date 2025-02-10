@@ -28,7 +28,7 @@ func TestCreateAndGetCollection(t *testing.T) {
 func TestAddPlanAndGet(t *testing.T) {
 	projectID := int64(1)
 	planName := "test"
-	planID, err := CreatePlan(planName, projectID)
+	planID, err := CreatePlan(planName, projectID, JmeterPlan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,11 +79,11 @@ func TestAddPlanAndGet(t *testing.T) {
 }
 func TestStorePlans(t *testing.T) {
 	projectID := int64(1)
-	planID1, err := CreatePlan("test1", projectID)
+	planID1, err := CreatePlan("test1", projectID, JmeterPlan)
 	if err != nil {
 		t.Fatal(err)
 	}
-	planID2, err := CreatePlan("test2", projectID)
+	planID2, err := CreatePlan("test2", projectID, JmeterPlan)
 	if err != nil {
 		t.Fatal(err)
 	}

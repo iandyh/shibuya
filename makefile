@@ -62,6 +62,12 @@ jmeter: shibuya/engines/jmeter
 	docker build -t shibuya:jmeter -f shibuya/engines/jmeter/Dockerfile shibuya
 	kind load docker-image shibuya:jmeter --name shibuya
 
+.PHONY: locust
+locust: shibuya/engines/locust
+	cd shibuya && sh build.sh locust
+	docker build -t shibuya:locust -f shibuya/engines/locust/Dockerfile shibuya
+	kind load docker-image shibuya:locust --name shibuya
+
 .PHONY: expose
 expose:
 	-killall kubectl

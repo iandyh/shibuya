@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -14,17 +15,6 @@ import (
 	es "github.com/iandyh/eventsource"
 	log "github.com/sirupsen/logrus"
 )
-
-type shibuyaEngine interface {
-	subscribe(runID int64, apiKey string) error
-	readMetrics() chan *shibuyaMetric
-	closeStream()
-	updateEngineUrl(url string)
-}
-
-type engineType struct{}
-
-var JmeterEngineType engineType
 
 type shibuyaMetric struct {
 	threads      float64
@@ -38,9 +28,7 @@ type shibuyaMetric struct {
 	runID        string
 }
 
-const enginePlanRoot = "/test-data"
-
-type baseEngine struct {
+type Engine struct {
 	name         string
 	serviceName  string
 	ingressName  string
@@ -57,17 +45,17 @@ type baseEngine struct {
 	*config.ExecutorContainer
 }
 
-func (be *baseEngine) makeBaseUrl() string {
+func (e *Engine) makeBaseUrl() string {
 	base := "%s/%s"
-	if strings.Contains(be.engineUrl, "http") {
+	if strings.Contains(e.engineUrl, "http") {
 		return base
 	}
 	return "https://" + base
 }
 
-func (be *baseEngine) subscribe(runID int64, apiKey string) error {
-	base := be.makeBaseUrl()
-	streamUrl := fmt.Sprintf(base, be.engineUrl, "stream")
+func (e *Engine) subscribe(runID int64, apiKey string) error {
+	base := e.makeBaseUrl()
+	streamUrl := fmt.Sprintf(base, e.engineUrl, "stream")
 	req, err := http.NewRequest("GET", streamUrl, nil)
 	if err != nil {
 		return err
@@ -76,7 +64,7 @@ func (be *baseEngine) subscribe(runID int64, apiKey string) error {
 	ctx, cancel := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 	httpClient := &http.Client{
-		Transport: be.httpClient.Transport,
+		Transport: e.httpClient.Transport,
 	}
 	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", apiKey))
 	stream, err := es.SubscribeWith("", httpClient, req)
@@ -84,59 +72,67 @@ func (be *baseEngine) subscribe(runID int64, apiKey string) error {
 		cancel()
 		return err
 	}
-	be.stream = stream
-	be.cancel = cancel
-	be.runID = runID
+	e.stream = stream
+	e.cancel = cancel
+	e.runID = runID
 	return nil
 }
 
-func (be *baseEngine) closeStream() {
-	be.cancel()
-	be.stream.Close()
+func (e *Engine) closeStream() {
+	e.cancel()
+	e.stream.Close()
 }
 
-func (be *baseEngine) readMetrics() chan *shibuyaMetric {
-	log.Println("BaseEngine does not readMetrics(). Use an engine type.")
-	return nil
+func (e *Engine) readMetrics() chan *shibuyaMetric {
+	ch := make(chan *shibuyaMetric)
+	go func() {
+	outer:
+		for {
+			select {
+			case ev, ok := <-e.stream.Events:
+				if !ok {
+					break outer
+				}
+				raw := ev.Data()
+				ch <- &shibuyaMetric{
+					raw:          raw,
+					collectionID: strconv.FormatInt(e.collectionID, 10),
+					planID:       strconv.FormatInt(e.planID, 10),
+					engineID:     strconv.FormatInt(int64(e.ID), 10),
+					runID:        strconv.FormatInt(e.runID, 10),
+				}
+			case _, ok := <-e.stream.Errors:
+				if !ok {
+					break outer
+				}
+			}
+		}
+		close(ch)
+	}()
+	return ch
 }
 
-func (be *baseEngine) updateEngineUrl(url string) {
-	be.engineUrl = url
+func (e *Engine) updateEngineUrl(url string) {
+	e.engineUrl = url
 }
 
-func findEngineConfig(et engineType, sc config.ShibuyaConfig) *config.ExecutorContainer {
-	switch et {
-	case JmeterEngineType:
-		return sc.ExecutorConfig.JmeterContainer.ExecutorContainer
-	}
-	return nil
-}
-
-func generateEngines(enginesRequired int, planID, collectionID, projectID int64,
-	et engineType, httpClient *http.Client) (engines []shibuyaEngine, err error) {
+func generateEngines(enginesRequired int, planID, collectionID, projectID int64, httpClient *http.Client) (engines []*Engine, err error) {
 	for i := 0; i < enginesRequired; i++ {
-		engineC := &baseEngine{
+		engineC := &Engine{
 			ID:           i,
 			projectID:    projectID,
 			collectionID: collectionID,
 			planID:       planID,
 			httpClient:   httpClient,
 		}
-		var e shibuyaEngine
-		switch et {
-		case JmeterEngineType:
-			e = NewJmeterEngine(engineC)
-		default:
-			return nil, makeWrongEngineTypeError()
-		}
-		engines = append(engines, e)
+		engines = append(engines, engineC)
 	}
 	return engines, nil
 }
 
-func generateEnginesWithUrl(enginesRequired int, planID, collectionID, projectID int64, et engineType, scheduler scheduler.EngineScheduler,
-	httpClient *http.Client) (engines []shibuyaEngine, err error) {
-	engines, err = generateEngines(enginesRequired, planID, collectionID, projectID, et, httpClient)
+func generateEnginesWithUrl(enginesRequired int, planID, collectionID, projectID int64, scheduler scheduler.EngineScheduler,
+	httpClient *http.Client) (engines []*Engine, err error) {
+	engines, err = generateEngines(enginesRequired, planID, collectionID, projectID, httpClient)
 	if err != nil {
 		return nil, err
 	}

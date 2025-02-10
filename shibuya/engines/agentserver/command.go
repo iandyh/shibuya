@@ -7,9 +7,6 @@ type Command struct {
 	Args    []string
 }
 
-func (c Command) ToExec(extraArgs []string) *exec.Cmd {
-	for _, ea := range extraArgs {
-		c.Args = append(c.Args, ea)
-	}
+func (c Command) ToExec() *exec.Cmd {
 	return exec.Command(c.Command, c.Args...)
 }

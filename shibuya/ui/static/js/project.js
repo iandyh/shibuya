@@ -13,7 +13,7 @@ var ProjectAttrs = {
         if (enable_sid) {
             attributes["attrs"]["sid"] = {
                 label: "SID"
-            } 
+            }
         }
         return attributes;
     }
@@ -37,6 +37,9 @@ var PlanAttrs = {
             plan_attrs: {
                 "name": {
                     label: "Plan Name"
+                },
+                "kind": {
+                    label: "Plan kind. For example, jmeter"
                 }
             }
         }

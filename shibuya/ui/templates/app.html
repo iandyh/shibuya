@@ -65,7 +65,7 @@
                     </span>
                     <form enctype="multipart/form-data" style="display: inline-block; padding-left: 1em; vertical-align: text-bottom;" novalidate>
                         <label for="planFile" class="btn btn-outline-dark" style="border-radius: 1.5em;"><i class="fas fa-file-upload"></i></label>
-                        <input type="file" name="planFile" @change="upload($event)" id="planFile" accept=".csv, .jmx, .txt, .json" style="display: none"/>
+                        <input type="file" name="planFile" @change="upload($event)" id="planFile" accept=".csv, .jmx, .txt, .json, .py" style="display: none"/>
                     </form>
                     <div class="alert alert-primary" role="alert">
                         <p class="mb-0">You can upload only one .jmx file per plan</p>

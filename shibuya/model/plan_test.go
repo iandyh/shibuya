@@ -8,10 +8,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestSupportedKinds(t *testing.T) {
+	k := PlanKind("asdf")
+	assert.False(t, k.IsSupported())
+
+	k = JmeterPlan
+	assert.True(t, k.IsSupported())
+
+	k = LocustPlan
+	assert.True(t, k.IsSupported())
+}
+
+func TestExtensions(t *testing.T) {
+	assert.True(t, len(ValidExtensions) == len(TestFileExtensions))
+	for _, item := range TestFileExtensions {
+		t.Log(item)
+	}
+}
+
 func TestCreateAndGetPlan(t *testing.T) {
 	name := "testplan"
 	projectID := int64(1)
-	planID, err := CreatePlan(name, projectID)
+	planID, err := CreatePlan(name, projectID, LocustPlan)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +38,10 @@ func TestCreateAndGetPlan(t *testing.T) {
 		t.Fatal(err)
 	}
 	assert.Equal(t, name, p.Name)
+	assert.Equal(t, LocustPlan, p.Kind)
 	assert.Equal(t, projectID, p.ProjectID)
+	assert.True(t, p.IsThePlanFileValid("asdf.py"))
+	assert.False(t, p.IsThePlanFileValid("asdf.jmx"))
 
 	p.Delete(nil)
 	p, err = GetPlan(planID)

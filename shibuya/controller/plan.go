@@ -2,7 +2,6 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -34,7 +33,11 @@ func NewPlanController(ep *model.ExecutionPlan, collection *model.Collection, sc
 }
 
 func (pc *PlanController) deploy(serviceIP string) error {
-	engineConfig := findEngineConfig(JmeterEngineType, pc.sc)
+	plan, err := model.GetPlan(pc.ep.PlanID)
+	if err != nil {
+		return err
+	}
+	engineConfig := pc.sc.ExecutorConfig.EnginesContainer[string(plan.Kind)]
 	if err := pc.scheduler.DeployPlan(pc.collection.ProjectID, pc.collection.ID, pc.ep.PlanID,
 		pc.ep.Engines, serviceIP, engineConfig); err != nil {
 		return err
@@ -43,9 +46,6 @@ func (pc *PlanController) deploy(serviceIP string) error {
 }
 
 func (pc *PlanController) prepare(plan *model.Plan, edc *enginesModel.EngineDataConfig, runID int64, storageClient object_storage.StorageInterface) ([]*enginesModel.EngineDataConfig, error) {
-	edc.Duration = strconv.Itoa(pc.ep.Duration)
-	edc.Concurrency = strconv.Itoa(pc.ep.Concurrency)
-	edc.Rampup = strconv.Itoa(pc.ep.Rampup)
 	engineDataConfigs := edc.DeepCopies(pc.ep.Engines)
 	var err error
 	for _, pf := range plan.Data {
@@ -84,11 +84,10 @@ func (pc *PlanController) prepare(plan *model.Plan, edc *enginesModel.EngineData
 	return engineDataConfigs, nil
 }
 
-func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
+func (pc *PlanController) subscribe() ([]*Engine, error) {
 	ep := pc.ep
 	collection := pc.collection
-	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID,
-		JmeterEngineType, pc.scheduler, pc.httpClient)
+	engines, err := generateEnginesWithUrl(ep.Engines, ep.PlanID, collection.ID, collection.ProjectID, pc.scheduler, pc.httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -101,10 +100,10 @@ func (pc *PlanController) subscribe() ([]shibuyaEngine, error) {
 		return nil, err
 	}
 	var wg sync.WaitGroup
-	readingEngines := []shibuyaEngine{}
+	readingEngines := []*Engine{}
 	for _, engine := range engines {
 		wg.Add(1)
-		go func(engine shibuyaEngine, runID int64) {
+		go func(engine *Engine, runID int64) {
 			defer wg.Done()
 			//After this step, the engine instance has states including stream client
 			err := engine.subscribe(runID, apiKey)
