@@ -126,6 +126,7 @@ type IngressConfig struct {
 }
 
 type MetricStorage struct {
+	Gateway          string `json:"gateway"`
 	RemoteWriteUrl   string `json:"url"`
 	RemoteWriteToken string `json:"token"`
 }

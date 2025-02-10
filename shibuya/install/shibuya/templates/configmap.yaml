@@ -105,7 +105,8 @@ data:
         {{- range $index, $item := .Values.runtime.metric_storage }}
             {
                 "url": {{ $item.url | quote }},
-                "token": {{ $item.token | quote }}
+                "token": {{ $item.token | quote }},
+                "gateway": {{ $item.gateway | quote }}
             }
         {{- end }}
         ],

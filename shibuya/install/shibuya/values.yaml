@@ -107,6 +107,7 @@ runtime:
   metric_storage:
     - url: "http://prometheus:9090/api/v1/write"
       token: ""
+      gateway: "http://shibuya-api-local:8080/api/metrics"
   scraper_container:
     image: "prom/prometheus"
     cpu: "0.5"

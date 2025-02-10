@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"net/url"
+	"strconv"
 	"time"
 
 	promCommonConfig "github.com/prometheus/common/config"
@@ -35,9 +36,10 @@ type Authorization struct {
 }
 
 type RemoteWriteConfig struct {
-	URL           string         `yaml:"url"`
-	RemoteTimeout time.Duration  `yaml:"remote_timeout"`
-	Authorization *Authorization `yaml:"authorization"`
+	URL           string            `yaml:"url"`
+	RemoteTimeout time.Duration     `yaml:"remote_timeout"`
+	Authorization *Authorization    `yaml:"authorization"`
+	Headers       map[string]string `yaml:"headers"`
 }
 
 type PromConfig struct {
@@ -77,17 +79,18 @@ func engineRelabelConfigs(collectionID int64) []RelabelConfig {
 	}
 }
 
-func makeRemoteWriteConfig(remotewriteUrl, remotewriteToken string) (*RemoteWriteConfig, error) {
-	if _, err := url.Parse(remotewriteUrl); err != nil {
+func makeRemoteWriteConfig(item config.MetricStorage, headers map[string]string) (*RemoteWriteConfig, error) {
+	if _, err := url.Parse(item.Gateway); err != nil {
 		return nil, err
 	}
 	remoteWriteConfig := &RemoteWriteConfig{
-		URL:           remotewriteUrl,
+		URL:           item.Gateway,
 		RemoteTimeout: time.Duration(60 * time.Second),
+		Headers:       headers,
 	}
 	az := &Authorization{
 		Type:        "Bearer",
-		Credentials: remotewriteToken,
+		Credentials: item.RemoteWriteToken,
 	}
 	remoteWriteConfig.Authorization = az
 	return remoteWriteConfig, nil
@@ -95,8 +98,11 @@ func makeRemoteWriteConfig(remotewriteUrl, remotewriteToken string) (*RemoteWrit
 
 func MakeScraperConfig(collectionID int64, namespace string, ms []config.MetricStorage) (*PromConfig, error) {
 	remoteWriteConfigs := make([]*RemoteWriteConfig, len(ms))
+	headers := map[string]string{
+		"collection_id": strconv.Itoa(int(collectionID)),
+	}
 	for i, item := range ms {
-		t, err := makeRemoteWriteConfig(item.RemoteWriteUrl, item.RemoteWriteToken)
+		t, err := makeRemoteWriteConfig(item, headers)
 		if err != nil {
 			return nil, err
 		}
