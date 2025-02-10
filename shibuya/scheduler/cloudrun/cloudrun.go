@@ -370,7 +370,7 @@ func (cr *CloudRun) GetEnginesByProject(projectID int64) ([]apiv1.Pod, error) {
 	return nil, nil
 }
 
-func (cr *CloudRun) CreateCollectionScraper(collectionID int64) error {
+func (cr *CloudRun) CreateCollectionScraper(token string, collectionID int64) error {
 	return nil
 }
 

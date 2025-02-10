@@ -20,6 +20,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/engines/containerstats"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
+	"github.com/rakutentech/shibuya/shibuya/http/auth"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	"github.com/reqfleet/pubsub/client"
@@ -423,7 +424,9 @@ func (as *AgentServer) Run() error {
 	go as.listenToCoordinator(msgChan)
 	go as.handleMetricStream()
 	router := as.HTTPRouter()
-	if err := http.ListenAndServe(":8080", router.Mux()); err != nil {
+	handlers := http.Handler(router.Mux())
+	// Running in http mode should be ok because engines are never directly exposed to public network
+	if err := http.ListenAndServe(":8080", auth.AuthRequiredWithToken(handlers, as.options.EngineMeta.APIKey)); err != nil {
 		return err
 	}
 	return nil
