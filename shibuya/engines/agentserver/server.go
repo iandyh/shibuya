@@ -20,6 +20,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/engines/containerstats"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
+	"github.com/rakutentech/shibuya/shibuya/http/auth"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	"github.com/reqfleet/pubsub/client"
@@ -406,6 +407,9 @@ func (as *AgentServer) HTTPRouter() *httproute.Router {
 			HandlerFunc: promhttp.Handler().ServeHTTP,
 		},
 	})
+	for _, r := range router.GetRoutes() {
+		r.HandlerFunc = auth.AuthRequired(r.HandlerFunc, as.options.EngineMeta.APIKey)
+	}
 	return router
 }
 

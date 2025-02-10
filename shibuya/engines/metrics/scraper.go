@@ -28,6 +28,7 @@ type ScrapeConfig struct {
 	JobName                 string             `yaml:"job_name"`
 	RelabelConfigs          []*relabel.Config  `yaml:"relabel_configs"`
 	ServiceDiscoveryConfigs []discovery.Config `yaml:"kubernetes_sd_configs"`
+	HTTPConfig              HTTPConfig         `yaml:",inline"`
 }
 
 type Authorization struct {
@@ -40,6 +41,10 @@ type RemoteWriteConfig struct {
 	RemoteTimeout time.Duration     `yaml:"remote_timeout"`
 	Authorization *Authorization    `yaml:"authorization"`
 	Headers       map[string]string `yaml:"headers"`
+}
+
+type HTTPConfig struct {
+	Authorization *Authorization `yaml:"authorization"`
 }
 
 type PromConfig struct {
@@ -96,7 +101,7 @@ func makeRemoteWriteConfig(item config.MetricStorage, headers map[string]string)
 	return remoteWriteConfig, nil
 }
 
-func MakeScraperConfig(collectionID int64, namespace string, ms []config.MetricStorage) (*PromConfig, error) {
+func MakeScraperConfig(token string, collectionID int64, namespace string, ms []config.MetricStorage) (*PromConfig, error) {
 	remoteWriteConfigs := make([]*RemoteWriteConfig, len(ms))
 	headers := map[string]string{
 		"collection_id": strconv.Itoa(int(collectionID)),
@@ -134,6 +139,12 @@ func MakeScraperConfig(collectionID int64, namespace string, ms []config.MetricS
 			JobName:                 "shibuya-metrics",
 			ServiceDiscoveryConfigs: []discovery.Config{sd},
 			RelabelConfigs:          rcs,
+			HTTPConfig: HTTPConfig{
+				Authorization: &Authorization{
+					Type:        "bearer",
+					Credentials: token,
+				},
+			},
 		},
 	}
 	return pc, nil

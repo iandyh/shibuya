@@ -350,11 +350,11 @@ func (kcm *K8sClientManager) PurgeProjectIngress(projectID int64) error {
 	return secretsClient.Delete(context.TODO(), pr.makeAPIKeySecretName(), deleteOpts)
 }
 
-func (kcm *K8sClientManager) CreateCollectionScraper(collectionID int64) error {
+func (kcm *K8sClientManager) CreateCollectionScraper(token string, collectionID int64) error {
 	cr := collectionResource(collectionID)
 	promDeployment := cr.makeScraperDeployment(kcm.scraperServiceAccount, kcm.Namespace,
 		kcm.sc.ExecutorConfig.NodeAffinity, kcm.sc.ExecutorConfig.Tolerations, kcm.sc.ScraperContainer)
-	promConfig, err := cr.makeScraperConfig(kcm.Namespace, kcm.sc.MetricStorage)
+	promConfig, err := cr.makeScraperConfig(token, kcm.Namespace, kcm.sc.MetricStorage)
 	if err != nil {
 		return err
 	}

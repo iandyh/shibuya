@@ -15,9 +15,9 @@ import (
 
 type collectionResource int64
 
-func (cr collectionResource) makeScraperConfig(namespace string,
+func (cr collectionResource) makeScraperConfig(token, namespace string,
 	metricStorage []config.MetricStorage) (*apiv1.ConfigMap, error) {
-	pc, err := metrics.MakeScraperConfig(int64(cr), namespace, metricStorage)
+	pc, err := metrics.MakeScraperConfig(token, int64(cr), namespace, metricStorage)
 	if err != nil {
 		return nil, err
 	}

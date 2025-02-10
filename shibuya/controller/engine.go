@@ -66,7 +66,7 @@ func (e *Engine) subscribe(runID int64, apiKey string) error {
 	httpClient := &http.Client{
 		Transport: e.httpClient.Transport,
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", apiKey))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", apiKey))
 	stream, err := es.SubscribeWith("", httpClient, req)
 	if err != nil {
 		cancel()

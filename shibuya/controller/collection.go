@@ -61,7 +61,11 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 	if err != nil {
 		return err
 	}
-	if err = c.Scheduler.CreateCollectionScraper(collection.ID); err != nil {
+	token, err := c.Scheduler.GetProjectAPIKey(collection.ProjectID)
+	if err != nil {
+		return err
+	}
+	if err = c.Scheduler.CreateCollectionScraper(token, collection.ID); err != nil {
 		log.Error(err)
 		return err
 	}
