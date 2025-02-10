@@ -136,7 +136,7 @@ func (c *Client) FetchFile(ro ReqOpts, path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", ro.APIKey))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ro.APIKey))
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (c *Client) makeRequestWithValues(resourceUrl, method string, values url.Va
 }
 
 func (c *Client) sendRequest(req *http.Request, ro ReqOpts) error {
-	req.Header.Set("Authorization", fmt.Sprintf("Bear %s", ro.APIKey))
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", ro.APIKey))
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
