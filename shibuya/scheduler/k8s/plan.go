@@ -43,14 +43,9 @@ func (plan planResource) makePlanDeployment(replicas int, serviceIP string,
 					Labels: labels,
 				},
 				Spec: apiv1.PodSpec{
-					Affinity:                     affinity,
-					Tolerations:                  tolerations,
-					AutomountServiceAccountToken: &t,
-					ImagePullSecrets: []apiv1.LocalObjectReference{
-						{
-							Name: sc.ExecutorConfig.ImagePullSecret,
-						},
-					},
+					Affinity:                      affinity,
+					Tolerations:                   tolerations,
+					AutomountServiceAccountToken:  &t,
 					TerminationGracePeriodSeconds: new(int64),
 					HostAliases:                   makeHostAliases(sc.ExecutorConfig.HostAliases),
 					Containers: []apiv1.Container{
@@ -81,6 +76,13 @@ func (plan planResource) makePlanDeployment(replicas int, serviceIP string,
 				},
 			},
 		},
+	}
+	if sc.ExecutorConfig.ImagePullSecret != "" {
+		sts.Spec.Template.Spec.ImagePullSecrets = []apiv1.LocalObjectReference{
+			{
+				Name: sc.ExecutorConfig.ImagePullSecret,
+			},
+		}
 	}
 	return sts
 }
