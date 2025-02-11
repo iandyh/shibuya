@@ -8,8 +8,7 @@ if kubectl get secret -n $namespace $secretName &>/dev/null; then
 fi
 ca_dir=$(pwd)/ca
 if [ -d "$ca_dir" ]; then
-    echo "$ca_dir exists. Exit..."
-    exit 0
+    echo "$ca_dir exists"
 else
     mkdir $ca_dir
 fi
