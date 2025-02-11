@@ -54,11 +54,35 @@ coordinator_image: base_image coordinator_build
 	docker build -t $(img) -f coordinator/Dockerfile --build-arg="binary_name=shibuya-coordinator" .
 	docker push $(img)
 
-.PHONY: e2e
-e2e:
-	go clean --testcache && go test -v -run ^TestFullAPI$$ github.com/rakutentech/shibuya/shibuya/apitests
+.PHONY: cleancache
+cleancache:
+	go clean --testcache
+
+## In order to run the apitests, you need to ensure everything is running.
+## You can run make shibuya && make expose
+.PHONY: apitests
+apitests: cleancache
+	go test -v github.com/rakutentech/shibuya/shibuya/apitests...
 
 .PHONY: alltests
-alltests:
-	go clean --testcache && go test -v $$(go list ./... | grep -v apitests)
+alltests: cleancache
+	go test -cover -v $$(go list ./... | grep -v apitests)
+
+## You need to ensure the db is running
+## You can run make db && make expose
+.PHONY: modeltests
+modeltests: cleancache
+	go test -cover -v github.com/rakutentech/shibuya/shibuya/model
+
+.PHONY: coordinatortests
+coordinatortests: cleancache
+	go test -cover -v github.com/rakutentech/shibuya/shibuya/coordinator...
+
+.PHONY: enginetests
+enginetests: cleancache
+	go test -cover -v github.com/rakutentech/shibuya/shibuya/engines...
+
+.PHONY: httplibtests
+httplibtests: cleancache
+	go test -cover -v github.com/rakutentech/shibuya/shibuya/http...
 
