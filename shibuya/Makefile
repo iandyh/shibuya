@@ -54,4 +54,11 @@ coordinator_image: base_image coordinator_build
 	docker build -t $(img) -f coordinator/Dockerfile --build-arg="binary_name=shibuya-coordinator" .
 	docker push $(img)
 
+.PHONY: e2e
+e2e:
+	go clean --testcache && go test -v -run ^TestFullAPI$$ github.com/rakutentech/shibuya/shibuya/apitests
+
+.PHONY: alltests
+alltests:
+	go clean --testcache && go test -v $$(go list ./... | grep -v apitests)
 
