@@ -1,4 +1,4 @@
-all: | cluster permissions db prometheus grafana shibuya jmeter local_storage ingress-controller
+all: | cluster permissions db prometheus grafana shibuya jmeter locust local_storage local_coordinator expose
 
 shibuya-controller-ns = shibuya-executors
 shibuya-executor-ns = shibuya-executors
