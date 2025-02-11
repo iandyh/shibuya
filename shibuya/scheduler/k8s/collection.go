@@ -68,6 +68,10 @@ func (cr collectionResource) makeScraperDeployment(serviceAccount, namespace str
 						{
 							Name:  "prom",
 							Image: scraperContainer.Image,
+							Args: []string{
+								"--web.listen-address=127.0.0.1:9090",
+								"--config.file=/etc/prometheus/prometheus.yml",
+							},
 							Resources: apiv1.ResourceRequirements{
 								Limits: apiv1.ResourceList{
 									apiv1.ResourceCPU:    resource.MustParse(scraperContainer.CPU),
