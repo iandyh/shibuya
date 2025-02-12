@@ -13,6 +13,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/coordinator/planprogress"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
+	"github.com/rakutentech/shibuya/shibuya/http/auth"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	pubsub "github.com/reqfleet/pubsub/server"
 	log "github.com/sirupsen/logrus"
@@ -57,28 +58,6 @@ type CoordinatorConfig struct {
 	EnableTLS  bool
 	InCluster  bool
 	APIKey     string
-}
-
-func (sc *ShibuyaCoordinator) authRequired(next http.Handler) http.Handler {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		bearer := r.Header.Get("Authorization")
-		if bearer == "" {
-			http.Error(w, "bearer header is empty", http.StatusForbidden)
-			return
-		}
-		t := strings.Split(bearer, " ")
-		if len(t) != 2 {
-			http.Error(w, "bearer header is invalid", http.StatusBadRequest)
-			return
-		}
-		key := t[1]
-		if key != sc.cc.APIKey {
-			http.Error(w, fmt.Sprintf("incorrect token %s", key), http.StatusForbidden)
-			return
-		}
-		next.ServeHTTP(w, r)
-	}
-	return http.HandlerFunc(fn)
 }
 
 func newFileServer() httproute.Routes {
@@ -127,15 +106,7 @@ func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 	rootRouter.AddRoutes(newFileServer())
 	mux := rootRouter.Mux()
 	mux.Handle("/{engine}/stream", &rp)
-	handler := http.Handler(mux)
-
-	middlewares := []func(http.Handler) http.Handler{
-		s.authRequired,
-	}
-	for _, m := range middlewares {
-		handler = m(handler)
-	}
-	s.Handler = handler
+	s.Handler = auth.AuthRequiredWithToken(http.Handler(mux), cc.APIKey)
 	s.cc = cc
 	return s
 }
