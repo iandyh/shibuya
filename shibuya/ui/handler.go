@@ -87,12 +87,13 @@ func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		loginUrl := fmt.Sprintf("/login?error_msg=%v", err)
 		http.Redirect(w, r, loginUrl, http.StatusSeeOther)
+		return
 	}
 	session.Values[auth.MLKey] = authResult.ML
 	session.Values[auth.AccountKey] = username
 	err = ss.Save(r, w, session)
 	if err != nil {
-		log.Panic(err)
+		log.Error(err)
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
