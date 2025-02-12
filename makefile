@@ -1,4 +1,4 @@
-all: | cluster permissions db prometheus grafana shibuya jmeter locust local_storage local_coordinator expose
+all: | cluster permissions db prometheus grafana local_storage shibuya_all
 
 shibuya-controller-ns = shibuya-executors
 shibuya-executor-ns = shibuya-executors
@@ -34,39 +34,9 @@ grafana: grafana/
 	kind load docker-image metrics-dashboard:local --name shibuya
 	helm upgrade --install metrics-dashboard grafana/metrics-dashboard
 
-.PHONY: base_image
-base_image:
-	cd shibuya && docker build -f Dockerfile.base -t shibuya:base .
-
-.PHONY: local_api
-local_api:
-	cd shibuya && sh build.sh api
-	docker build -f shibuya/Dockerfile --build-arg env=local -t api:local shibuya
-	kind load docker-image api:local --name shibuya
-
-.PHONY: local_controller
-local_controller:
-	cd shibuya && sh build.sh controller
-	docker build -f shibuya/Dockerfile --build-arg binary_name=shibuya-controller --build-arg env=local -t controller:local shibuya
-	kind load docker-image controller:local --name shibuya
-
-.PHONY: shibuya
-shibuya: base_image local_api local_controller grafana
-	helm uninstall shibuya || true
-	cd shibuya && sh gen_coordinator_ca.sh $(shibuya-controller-ns)
-	cd shibuya && helm upgrade --install shibuya install/shibuya
-
-.PHONY: jmeter
-jmeter: shibuya/engines/jmeter
-	cd shibuya && sh build.sh jmeter
-	docker build -t shibuya:jmeter -f shibuya/engines/jmeter/Dockerfile shibuya
-	kind load docker-image shibuya:jmeter --name shibuya
-
-.PHONY: locust
-locust: shibuya/engines/locust
-	cd shibuya && sh build.sh locust
-	docker build -t shibuya:locust -f shibuya/engines/locust/Dockerfile shibuya
-	kind load docker-image shibuya:locust --name shibuya
+.PHONY: shibuya_all
+shibuya_all:
+	make -C shibuya shibuya_all
 
 .PHONY: expose
 expose:
@@ -74,6 +44,7 @@ expose:
 	-kubectl -n $(shibuya-controller-ns) port-forward service/shibuya-metrics-dashboard 3000:3000 > /dev/null 2>&1 &
 	-kubectl -n $(shibuya-controller-ns) port-forward service/shibuya-api-local 8080:8080 > /dev/null 2>&1 &
 	-kubectl -n $(shibuya-controller-ns) port-forward service/db 3306:3306 > /dev/null 2>&1 &
+
 # TODO!
 # After k8s 1.22, service account token is no longer auto generated. We need to manually create the secret
 # for the service account. ref: "https://kubernetes.io/docs/reference/access-authn-authz/service-accounts-admin/#manual-secret-management-for-serviceaccounts"
@@ -110,11 +81,3 @@ local_storage:
 	docker build -t shibuya:storage local_storage
 	kind load docker-image shibuya:storage --name shibuya
 	kubectl -n $(shibuya-controller-ns) replace -f kubernetes/storage.yaml --force
-
-.PHONY:local_coordinator
-local_coordinator: base_image
-	# if you need to debug the controller, please use the makefile in the ingress controller folder
-	# And update the image in the config.json
-	cd shibuya && sh build.sh coordinator
-	docker build -f shibuya/coordinator/Dockerfile --build-arg binary_name=shibuya-coordinator -t coordinator:local shibuya
-	kind load docker-image coordinator:local --name shibuya

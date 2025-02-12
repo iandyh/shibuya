@@ -86,3 +86,52 @@ enginetests: cleancache
 httplibtests: cleancache
 	go test -cover -v github.com/rakutentech/shibuya/shibuya/http...
 
+########### Below are for local env build up #####
+## This namespace should be the same as the one in parent makefile
+shibuya-controller-ns = shibuya-executors
+
+.PHONY: shibuya_all
+shibuya_all: shibuya local_coordinator engines
+
+.PHONY: shibuya
+shibuya: base_image local_api local_controller
+	helm uninstall shibuya || true
+	sh gen_coordinator_ca.sh $(shibuya-controller-ns)
+	helm upgrade --install shibuya install/shibuya
+	sleep 3
+	make -C ../ expose
+
+.PHONY: local_coordinator
+local_coordinator: base_image
+	# if you need to debug the controller, please use the makefile in the ingress controller folder
+	# And update the image in the config.json
+	sh build.sh coordinator
+	docker build -f coordinator/Dockerfile --build-arg binary_name=shibuya-coordinator -t coordinator:local .
+	kind load docker-image coordinator:local --name shibuya
+
+.PHONY: local_api
+local_api:
+	sh build.sh api
+	docker build -f Dockerfile --build-arg env=local -t api:local .
+	kind load docker-image api:local --name shibuya
+
+.PHONY: local_controller
+local_controller:
+	sh build.sh controller
+	docker build -f Dockerfile --build-arg binary_name=shibuya-controller --build-arg env=local -t controller:local .
+	kind load docker-image controller:local --name shibuya
+
+.PHONY: jmeter
+jmeter: engines/jmeter
+	sh build.sh jmeter
+	docker build -t shibuya:jmeter -f engines/jmeter/Dockerfile .
+	kind load docker-image shibuya:jmeter --name shibuya
+
+.PHONY: locust
+locust: engines/locust
+	sh build.sh locust
+	docker build -t shibuya:locust -f engines/locust/Dockerfile .
+	kind load docker-image shibuya:locust --name shibuya
+
+.PHONY: engines
+engines: jmeter locust
