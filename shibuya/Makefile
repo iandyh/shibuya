@@ -98,7 +98,7 @@ shibuya: base_image local_api local_controller
 	helm uninstall shibuya || true
 	sh gen_coordinator_ca.sh $(shibuya-controller-ns)
 	helm upgrade --install shibuya install/shibuya
-	kubectl wait --for=condition=Available deployment/shibuya-apiserver-local --timeout=1m
+	sleep 3
 	make -C ../ expose
 
 .PHONY: local_coordinator
