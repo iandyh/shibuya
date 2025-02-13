@@ -5,6 +5,18 @@ tag: local
 repository: ""
 image_pull_secrets: []
 
+container_port: 8080
+
+probes:
+  liveness:
+    path: /health
+    initialDelaySeconds: 1
+    periodSeconds: 10
+  readiness:
+    path: /health
+    initialDelaySeconds: 1
+    periodSeconds: 10
+
 controller:
   image:
     name: controller

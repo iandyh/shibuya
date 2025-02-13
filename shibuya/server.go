@@ -37,6 +37,9 @@ func main() {
 	mux := rootRouter.Mux()
 
 	mux.Handle("GET /metrics", promhttp.Handler())
+	mux.Handle("GET /health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Alive"))
+	}))
 	handler := http.Handler(mux)
 	handler = api.RequestLoggerWithoutPaths(handler)(handler)
 	middlewares := []func(http.Handler) http.Handler{

@@ -62,7 +62,19 @@ spec:
               key: client_secret
         {{- end }}
         ports:
-          - containerPort: 8080
+          - containerPort: {{ .Values.container_port }}
+        livenessProbe:
+          httpGet:
+            path:  {{ .Values.probes.liveness.path }}
+            port: {{ .Values.container_port }}
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+        readinessProbe:
+          httpGet:
+            path:  {{ .Values.probes.readiness.path }}
+            port: {{ .Values.container_port }}
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
         volumeMounts:
         - name: shibuya-ca
           mountPath: "/tls"
@@ -103,4 +115,5 @@ spec:
         secret:
           secretName: google-oauth2
       {{- end }}
+
 
