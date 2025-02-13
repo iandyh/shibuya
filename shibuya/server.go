@@ -10,7 +10,6 @@ import (
 	"github.com/gorilla/context"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rakutentech/shibuya/shibuya/api"
-	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
@@ -21,10 +20,6 @@ import (
 func main() {
 	sc := config.LoadConfig()
 	config.SetupLogging(sc)
-	endpoint := model.MakeMySQLEndpoint(sc.DBConf)
-	if err := auth.CreateSesstionStore(endpoint, sc.DBConf.Keypairs); err != nil {
-		log.Fatal(err)
-	}
 	if err := model.CreateMySQLClient(sc.DBConf); err != nil {
 		log.Fatal(err)
 	}

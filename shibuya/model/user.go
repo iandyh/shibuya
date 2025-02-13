@@ -3,8 +3,8 @@ package model
 import (
 	"net/http"
 
-	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 )
 
 type Account struct {
@@ -13,29 +13,31 @@ type Account struct {
 	Name  string
 }
 
-var es interface{}
-
 func GetAccountBySession(r *http.Request, authConfig *config.AuthConfig) *Account {
 	a := new(Account)
 	a.MLMap = make(map[string]interface{})
 	if authConfig.NoAuth {
 		a.Name = "shibuya"
 		a.ML = []string{a.Name}
-		a.MLMap[a.Name] = es
+		a.MLMap[a.Name] = struct{}{}
 		return a
 	}
-	session, err := auth.SessionStore.Get(r, authConfig.SessionKey)
+	cookie, err := r.Cookie(authtoken.CookieName)
 	if err != nil {
 		return nil
 	}
-	accountName := session.Values[auth.AccountKey]
-	if accountName == nil {
+	token, err := authtoken.VerifyJWT(cookie.Value, "", "")
+	if err != nil {
 		return nil
 	}
-	a.Name = accountName.(string)
-	a.ML = session.Values[auth.MLKey].([]string)
+	tokenClaim, err := authtoken.FindTokenClaim(token)
+	if err != nil {
+		return nil
+	}
+	a.Name = tokenClaim.Username
+	a.ML = tokenClaim.Groups
 	for _, m := range a.ML {
-		a.MLMap[m] = es
+		a.MLMap[m] = struct{}{}
 	}
 	return a
 }

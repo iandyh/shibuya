@@ -61,6 +61,11 @@ spec:
               name: {{ .Values.runtime.auth_config.oauth_logins.google.secret_name }}
               key: client_secret
         {{- end }}
+        - name: jwt-secret
+          valueFrom:
+            secretKeyRef:
+              name: shibuya-jwt-secret
+              key: jwt_secret
         ports:
           - containerPort: {{ .Values.container_port }}
         livenessProbe:

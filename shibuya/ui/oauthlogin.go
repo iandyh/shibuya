@@ -11,10 +11,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/sessions"
-	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/auth/keys"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	"golang.org/x/oauth2"
 )
 
@@ -62,12 +61,8 @@ func (u *UI) callbackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, IncorrectAuthProviderError.Error(), http.StatusBadRequest)
 		return
 	}
-	session, err := auth.SessionStore.Get(r, u.sc.AuthConfig.SessionKey)
+	cookie, err := u.handleOauthCallback(r, config, provider)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := handleOauthCallback(r, config, provider, session); err != nil {
 		if errors.Is(IncorrectOauthState, err) || errors.Is(TokenExchangeFailed, err) {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
@@ -75,7 +70,7 @@ func (u *UI) callbackHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	session.Save(r, w)
+	http.SetCookie(w, cookie)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -96,33 +91,35 @@ func (u *UI) loginByProvider(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
 }
 
-func handleOauthCallback(r *http.Request, oauthConfig oauth2.Config, provider string, session *sessions.Session) error {
+func (u *UI) handleOauthCallback(r *http.Request, oauthConfig oauth2.Config, provider string) (*http.Cookie, error) {
 	cookie, err := r.Cookie(oauthStateCookie)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if r.URL.Query().Get("state") != cookie.Value {
-		return IncorrectOauthState
+		return nil, IncorrectOauthState
 	}
 	code := r.URL.Query().Get("code")
 	token, err := oauthConfig.Exchange(context.Background(), code)
 	if err != nil {
-		return TokenExchangeFailed
+		return nil, TokenExchangeFailed
 	}
 	client := oauthConfig.Client(context.WithValue(context.Background(),
 		oauth2.HTTPClient, oauthHTTPClient), token)
 	userAPI := ProviderUserAPI[provider]
 	resp, err := client.Get(userAPI)
 	if err != nil {
-		return errors.New("Failed to get user info")
+		return nil, errors.New("Failed to get user info")
 	}
 	defer resp.Body.Close()
 	username, err := ProviderUserDecoder[provider](resp)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	ml := []string{username}
-	session.Values[auth.AccountKey] = username
-	session.Values[auth.MLKey] = ml
-	return nil
+	jwtToken, err := authtoken.GenToken(username, []string{username}, 0)
+	if err != nil {
+		return nil, err
+	}
+	secure := !u.sc.DevMode
+	return authtoken.MakeTokenCookie(jwtToken, secure), nil
 }
