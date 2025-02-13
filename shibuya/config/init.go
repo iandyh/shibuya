@@ -12,11 +12,14 @@ import (
 	"path"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	apiv1 "k8s.io/api/core/v1"
 )
 
 const (
-	ConfigFileName = "config.json"
+	ConfigFileName     = "config.json"
+	AuthProviderGoogle = "google"
 )
 
 var (
@@ -31,10 +34,26 @@ type LdapConfig struct {
 	LdapPort       string `json:"ldap_port"`
 }
 
+type OauthClient struct {
+	ClientID     string
+	ClientSecret string
+	Endpoint     string
+	RedirectURL  string   `json:"redirect_url"`
+	Scopes       []string `json:"scopes"`
+}
+
+type GoogleOauth struct {
+	OauthClient
+	Scopes []string
+}
+
 type AuthConfig struct {
-	AdminUsers []string `json:"admin_users"`
-	NoAuth     bool     `json:"no_auth"`
-	SessionKey string   `json:"session_key"`
+	AdminUsers        []string               `json:"admin_users"`
+	NoAuth            bool                   `json:"no_auth"`
+	SessionKey        string                 `json:"session_key"`
+	EnableGoogleLogin bool                   `json:"enable_google_login"`
+	OauthLogins       map[string]OauthClient `json:"oauth_logins"`
+	OauthProvider     map[string]oauth2.Config
 	*LdapConfig
 }
 
@@ -258,6 +277,17 @@ func LoadConfig() ShibuyaConfig {
 	}
 	if sc.IngressConfig.GCInterval == "" {
 		sc.IngressConfig.GCInterval = "30s"
+	}
+	sc.AuthConfig.OauthProvider = make(map[string]oauth2.Config)
+	for provider, oac := range sc.AuthConfig.OauthLogins {
+		sc.AuthConfig.OauthProvider[provider] = oauth2.Config{
+			ClientID:     os.Getenv("google_client_id"),
+			ClientSecret: os.Getenv("google_client_secret"),
+			Endpoint:     google.Endpoint,
+			RedirectURL:  oac.RedirectURL,
+			Scopes:       oac.Scopes,
+		}
+		log.Infof("Setting Google Oauth redirectional url with %s", oac.RedirectURL)
 	}
 	return *sc
 }

@@ -49,6 +49,18 @@ spec:
         - name: {{ .key | quote }}
           value: {{ .value | quote }}
         {{- end }}
+        {{- if .Values.runtime.auth_config.oauth_logins.google  }}
+        - name: google_client_id
+          valueFrom:
+            secretKeyRef:
+              name: google-oauth2
+              key: client_id
+        - name: google_client_secret
+          valueFrom:
+            secretKeyRef:
+              name: google-oauth2
+              key: client_secret
+        {{- end }}
         ports:
           - containerPort: 8080
         volumeMounts:
@@ -85,5 +97,10 @@ spec:
       - name: shibuya-gcp-auth
         secret:
           secretName: shibuya-auth-keys-gcp
+      {{- end }}
+      {{- if .Values.runtime.auth_config.enable_google_login  }}
+      - name: google-oauth2
+        secret:
+          secretName: google-oauth2
       {{- end }}
 
