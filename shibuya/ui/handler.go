@@ -150,6 +150,18 @@ func (u *UI) Router() *httproute.Router {
 			HandlerFunc: u.loginPageHandler,
 		},
 		{
+			Name:        "providers login",
+			Method:      "GET",
+			Path:        "/login/{provider}",
+			HandlerFunc: u.loginByProvider,
+		},
+		{
+			Name:        "providers login call back",
+			Method:      "GET",
+			Path:        "/login/callback/{provider}",
+			HandlerFunc: u.callbackHandler,
+		},
+		{
 			Name:        "logout",
 			Method:      "POST",
 			Path:        "/logout",

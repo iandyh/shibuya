@@ -57,6 +57,15 @@ runtime:
     base_dn: ""
     no_auth: true
     session_key: ""
+    oauth_logins:
+      google:
+        enabled: false
+        secret_name: google-oauth2
+        redirect_url: "http://localhost:8080/login/callback/google"
+        scopes:
+        - openid
+        - profile
+        - email
   http_config:
     proxy: ""
   db:
