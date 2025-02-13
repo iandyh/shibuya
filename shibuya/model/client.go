@@ -15,19 +15,20 @@ var (
 )
 
 func MakeMySQLEndpoint(conf *config.MySQLConfig) string {
-	return fmt.Sprintf("%s:%s@tcp(%s)/%s?", conf.User, conf.Password, conf.Host, conf.Database)
+	params := make(map[string]string)
+	params["parseTime"] = "true"
+	ep := fmt.Sprintf("%s:%s@tcp(%s)/%s?", conf.User, conf.Password, conf.Host, conf.Database)
+	for k, v := range params {
+		dsn := fmt.Sprintf("%s=%s&", k, v)
+		ep += dsn
+	}
+	return ep
 }
 
 func CreateMySQLClient(conf *config.MySQLConfig) error {
 	var err error
 	once.Do(func() {
-		params := make(map[string]string)
-		params["parseTime"] = "true"
 		endpoint := MakeMySQLEndpoint(conf)
-		for k, v := range params {
-			dsn := fmt.Sprintf("%s=%s&", k, v)
-			endpoint += dsn
-		}
 		db, err = sql.Open("mysql", endpoint)
 		db.SetConnMaxLifetime(30 * time.Second)
 	})
