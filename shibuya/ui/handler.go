@@ -7,9 +7,9 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	"github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
-	log "github.com/sirupsen/logrus"
 )
 
 type UI struct {
@@ -76,11 +76,6 @@ func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request) {
 
 func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	ss := auth.SessionStore
-	session, err := ss.Get(r, u.sc.AuthConfig.SessionKey)
-	if err != nil {
-		log.Print(err)
-	}
 	username := r.Form.Get("username")
 	password := r.Form.Get("password")
 	authResult, err := u.authMethod.Auth(username, password)
@@ -89,24 +84,18 @@ func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, loginUrl, http.StatusSeeOther)
 		return
 	}
-	session.Values[auth.MLKey] = authResult.ML
-	session.Values[auth.AccountKey] = username
-	err = ss.Save(r, w, session)
-	if err != nil {
-		log.Error(err)
-	}
+	jwtToken, err := token.GenToken(username, authResult.ML, 0)
+	cookie := token.MakeTokenCookie(jwtToken, !u.sc.DevMode)
+	http.SetCookie(w, cookie)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (u *UI) logoutHandler(w http.ResponseWriter, r *http.Request) {
-	session, err := auth.SessionStore.Get(r, u.sc.AuthConfig.SessionKey)
-	if err != nil {
-		log.Print(err)
-		return
-	}
-	delete(session.Values, auth.MLKey)
-	delete(session.Values, auth.AccountKey)
-	session.Save(r, w)
+	http.SetCookie(w, &http.Cookie{
+		Name:   token.CookieName,
+		Path:   "/",
+		MaxAge: -1,
+	})
 }
 
 type LoginResp struct {

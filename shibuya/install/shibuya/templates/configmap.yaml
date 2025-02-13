@@ -14,7 +14,6 @@ data:
             "system_user": {{ .Values.runtime.auth_config.system_user | quote }},
             "system_password": {{ .Values.runtime.auth_config.system_password | quote }},
             "base_dn": {{ .Values.runtime.auth_config.base_dn | quote }},
-            "session_key": {{ .Values.runtime.auth_config.session_key | quote }},
             "oauth_logins": {{ .Values.runtime.auth_config.oauth_logins | toJson }},
             "no_auth": {{ .Values.runtime.auth_config.no_auth }}
         },

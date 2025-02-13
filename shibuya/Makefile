@@ -97,6 +97,7 @@ shibuya_all: shibuya local_coordinator engines
 shibuya: base_image local_api local_controller
 	helm uninstall shibuya || true
 	sh gen_coordinator_ca.sh $(shibuya-controller-ns)
+	sh gen_jwt_secret.sh $(shibuya-controller-ns) dummy-jwt-secret
 	helm upgrade --install shibuya install/shibuya
 	kubectl wait --for=condition=Ready pods -l app=shibuya-apiserver --timeout=1m
 	make -C ../ expose

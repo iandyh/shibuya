@@ -68,7 +68,6 @@ runtime:
     system_password: ""
     base_dn: ""
     no_auth: true
-    session_key: ""
     oauth_logins:
       google:
         enabled: false

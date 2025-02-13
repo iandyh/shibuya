@@ -50,7 +50,6 @@ type GoogleOauth struct {
 type AuthConfig struct {
 	AdminUsers        []string               `json:"admin_users"`
 	NoAuth            bool                   `json:"no_auth"`
-	SessionKey        string                 `json:"session_key"`
 	EnableGoogleLogin bool                   `json:"enable_google_login"`
 	OauthLogins       map[string]OauthClient `json:"oauth_logins"`
 	OauthProvider     map[string]oauth2.Config
