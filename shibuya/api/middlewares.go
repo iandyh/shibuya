@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
@@ -26,8 +25,8 @@ var (
 	}
 )
 
-func authWithSession(r *http.Request, authConfig *config.AuthConfig) (*model.Account, error) {
-	account := model.GetAccountBySession(r, authConfig)
+func authWithSession(r *http.Request) (*model.Account, error) {
+	account := model.GetAccountBySession(r)
 	if account == nil {
 		return nil, makeLoginError()
 	}
@@ -39,11 +38,11 @@ func authWithToken(_ *http.Request) (*model.Account, error) {
 	return nil, errors.New("No token presented")
 }
 
-func authRequired(next http.HandlerFunc, authConfig *config.AuthConfig) http.HandlerFunc {
+func authRequired(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var account *model.Account
 		var err error
-		account, err = authWithSession(r, authConfig)
+		account, err = authWithSession(r)
 		if err != nil {
 			handleErrors(w, err)
 			return

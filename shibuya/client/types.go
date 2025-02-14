@@ -14,17 +14,40 @@ type Meta struct {
 type ClientOpts struct {
 	Client   *http.Client
 	Endpoint string
+	Token    string
 }
 
-func NewClientOpts(endpoint string, httpClient *http.Client) *ClientOpts {
+type TransportWithToken struct {
+	Transport http.RoundTripper
+	Token     string
+}
+
+func (t *TransportWithToken) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Clone the request to avoid modifying the original
+	clonedReq := req.Clone(req.Context())
+
+	// Add authentication headers
+	clonedReq.Header.Set("Authorization", "Bearer "+t.Token)
+	// Use the underlying transport (default if nil)
+	if t.Transport == nil {
+		t.Transport = http.DefaultTransport
+	}
+	return t.Transport.RoundTrip(clonedReq)
+}
+
+func NewClientOpts(endpoint, token string, httpClient *http.Client) *ClientOpts {
 	if httpClient == nil {
 		httpClient = &http.Client{
+			Transport: &TransportWithToken{
+				Token: token,
+			},
 			Timeout: 5 * time.Second,
 		}
 	}
 	return &ClientOpts{
 		Client:   httpClient,
 		Endpoint: endpoint,
+		Token:    token,
 	}
 }
 

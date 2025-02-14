@@ -1,6 +1,7 @@
 package token
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/rakutentech/shibuya/shibuya/auth/keys"
 )
 
 const (
@@ -41,10 +43,15 @@ func GenToken(username string, groups []string, exp time.Duration) (string, erro
 	if exp == 0 {
 		exp = CookieLifeSpan
 	}
+	salt, err := keys.GenerateSalt()
+	if err != nil {
+		return "", err
+	}
 	claims := jwt.MapClaims{
 		"sub":    username,
 		"groups": groups,
 		"exp":    time.Now().Add(exp).Unix(), // Expires in 24 hours
+		"salt":   hex.EncodeToString(salt),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtSecret)

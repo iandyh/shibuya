@@ -55,7 +55,7 @@ type HomeResp struct {
 }
 
 func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request) {
-	account := model.GetAccountBySession(r, u.sc.AuthConfig)
+	account := model.GetAccountBySession(r)
 	if account == nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
