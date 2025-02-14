@@ -38,7 +38,7 @@ func prepareCollection(collection *model.Collection) []*enginesModel.EngineDataC
 	return engineDataConfigs
 }
 
-func (c *Controller) DeployCollection(collection *model.Collection) error {
+func (c *Controller) DeployCollection(collection *model.Collection, apiToken string) error {
 	eps, err := collection.GetExecutionPlans()
 	if err != nil {
 		return err
@@ -65,7 +65,7 @@ func (c *Controller) DeployCollection(collection *model.Collection) error {
 	if err != nil {
 		return err
 	}
-	if err = c.Scheduler.CreateCollectionScraper(token, collection.ID); err != nil {
+	if err = c.Scheduler.CreateCollectionScraper(apiToken, token, collection.ID); err != nil {
 		log.Error(err)
 		return err
 	}

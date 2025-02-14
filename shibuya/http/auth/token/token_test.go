@@ -11,9 +11,10 @@ import (
 func TestGenToken(t *testing.T) {
 	username := "asdf"
 	groups := []string{username}
-	token, err := authtoken.GenToken(username, groups, 5*time.Second)
+	token1, err := authtoken.GenToken(username, groups, 5*time.Second)
 	assert.Nil(t, err)
-	t.Log(token)
+	token2, err := authtoken.GenToken(username, groups, 5*time.Second)
+	assert.NotEqual(t, token1, token2)
 }
 
 func TestTokenCookie(t *testing.T) {

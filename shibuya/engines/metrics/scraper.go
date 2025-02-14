@@ -102,12 +102,15 @@ func makeRemoteWriteConfig(item config.MetricStorage, headers map[string]string)
 	return remoteWriteConfig, nil
 }
 
-func MakeScraperConfig(token string, collectionID int64, namespace string, ms []config.MetricStorage) (*PromConfig, error) {
+func MakeScraperConfig(apiToken, token string, collectionID int64, namespace string, ms []config.MetricStorage) (*PromConfig, error) {
 	remoteWriteConfigs := make([]*RemoteWriteConfig, len(ms))
 	headers := map[string]string{
 		"collection_id": strconv.Itoa(int(collectionID)),
 	}
 	for i, item := range ms {
+		if item.Gateway != "" {
+			item.RemoteWriteToken = apiToken
+		}
 		t, err := makeRemoteWriteConfig(item, headers)
 		if err != nil {
 			return nil, err

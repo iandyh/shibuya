@@ -16,7 +16,12 @@ import (
 type EngineScheduler interface {
 	DeployPlan(projectID, collectionID, planID int64, replicas int, serviceIP string, containerConfig *config.ExecutorContainer) error
 	CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error)
-	CreateCollectionScraper(token string, collectionID int64) error
+	// we have two types tokens
+	// One is for sending the metrics back to the apiserver(apiToken).
+	// They have 24 hours expiration time set
+	// One is for the scraper to be authenticated with the engines
+	// They are also short-lived and managed at project level
+	CreateCollectionScraper(apiToken, token string, collectionID int64) error
 	FetchEngineUrlsByPlan(collectionID, planID int64, opts *smodel.EngineOwnerRef) ([]string, error)
 	PurgeCollection(collectionID int64) error
 	GetDeployedCollections() (map[int64]time.Time, error)

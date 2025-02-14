@@ -1,9 +1,11 @@
 package model
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
+	httpauth "github.com/rakutentech/shibuya/shibuya/http/auth"
 	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 )
 
@@ -13,20 +15,26 @@ type Account struct {
 	Name  string
 }
 
-func GetAccountBySession(r *http.Request, authConfig *config.AuthConfig) *Account {
+func FindTokenFromHeaders(r *http.Request) (string, error) {
+	cookie, err := r.Cookie(authtoken.CookieName)
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			bearer := r.Header.Get(httpauth.AuthHeader)
+			return httpauth.FindToken(bearer)
+		}
+		return "", err
+	}
+	return cookie.Value, nil
+}
+
+func GetAccountBySession(r *http.Request) *Account {
 	a := new(Account)
 	a.MLMap = make(map[string]interface{})
-	if authConfig.NoAuth {
-		a.Name = "shibuya"
-		a.ML = []string{a.Name}
-		a.MLMap[a.Name] = struct{}{}
-		return a
-	}
-	cookie, err := r.Cookie(authtoken.CookieName)
+	tokenString, err := FindTokenFromHeaders(r)
 	if err != nil {
 		return nil
 	}
-	token, err := authtoken.VerifyJWT(cookie.Value, "", "")
+	token, err := authtoken.VerifyJWT(tokenString, "", "")
 	if err != nil {
 		return nil
 	}
@@ -43,9 +51,6 @@ func GetAccountBySession(r *http.Request, authConfig *config.AuthConfig) *Accoun
 }
 
 func (a *Account) IsAdmin(authConfig *config.AuthConfig) bool {
-	if authConfig.NoAuth {
-		return true
-	}
 	for _, ml := range a.ML {
 		for _, admin := range authConfig.AdminUsers {
 			if ml == admin {

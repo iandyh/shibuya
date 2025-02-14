@@ -62,7 +62,6 @@ runtime:
   distributed_mode: true
   auth_config:
     admin_users: []
-    no_auth: true
     ldap_config:
       enabled: false
       ldap_server: ""

@@ -12,6 +12,7 @@ import (
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/controller"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	"github.com/rakutentech/shibuya/shibuya/object_storage"
@@ -475,7 +476,14 @@ func (ca *CollectionAPI) collectionDeploymentHandler(w http.ResponseWriter, r *h
 		handleErrors(w, err)
 		return
 	}
-	if err := ca.ctr.DeployCollection(collection); err != nil {
+	account := r.Context().Value(accountKey).(*model.Account)
+	// We set the token timeout to 1 day. This is the max duration for a run in a collection
+	token, err := authtoken.GenToken(account.Name, account.ML, time.Hour*24)
+	if err != nil {
+		handleErrors(w, err)
+		return
+	}
+	if err := ca.ctr.DeployCollection(collection, token); err != nil {
 		var dbe *model.DBError
 		if errors.As(err, &dbe) {
 			handleErrors(w, makeInvalidRequestError(err.Error()))

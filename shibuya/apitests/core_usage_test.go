@@ -1,7 +1,10 @@
 package apitests
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"os"
@@ -10,6 +13,7 @@ import (
 
 	es "github.com/iandyh/eventsource"
 	"github.com/rakutentech/shibuya/shibuya/client"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -23,8 +27,39 @@ type resourceManager struct {
 	planClient       *client.PlanClient
 }
 
-func newResourceManager(endpoint string) *resourceManager {
-	clientOpts := client.NewClientOpts(endpoint, nil)
+func fetchToken(endpoint string) (string, error) {
+	form := url.Values{}
+	form.Add("username", "shibuya")
+	form.Add("password", "test")
+	req, err := http.NewRequest("POST", fmt.Sprintf("%s/login", endpoint), strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // Prevent auto-following redirects
+		},
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	for _, cookie := range resp.Cookies() {
+		if cookie.Name == authtoken.CookieName {
+			return cookie.Value, nil
+		}
+	}
+	return "", errors.New("Cannot find the cookie")
+}
+
+func newResourceManager(endpoint, url string) *resourceManager {
+	token, err := fetchToken(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	clientOpts := client.NewClientOpts(endpoint, token, nil)
 	return &resourceManager{
 		endpoint:         endpoint,
 		projectClient:    client.NewProjectClient(clientOpts),
@@ -124,7 +159,7 @@ func (rm *resourceManager) prepareResources(project *model.Project, kind model.P
 // Trigger the test and we check whether the data is being equally shared in the 2 engines(each should have 1)
 func TestFullAPI(t *testing.T) {
 	endpoint := "http://localhost:8080"
-	rm := newResourceManager(endpoint)
+	rm := newResourceManager(endpoint, endpoint)
 	project, err := rm.createProject()
 	assert.Nil(t, err)
 
@@ -238,7 +273,7 @@ func TestFullAPI(t *testing.T) {
 
 func TestObjectCRUD(t *testing.T) {
 	endpoint := "http://localhost:8080"
-	rm := newResourceManager(endpoint)
+	rm := newResourceManager(endpoint, endpoint)
 	project, err := rm.createProject()
 	assert.Nil(t, err)
 	collection, plan, err := rm.prepareResources(project, model.JmeterPlan, "sample.jmx")
@@ -262,7 +297,7 @@ func TestObjectCRUD(t *testing.T) {
 
 func TestObjectCRUDWithErrors(t *testing.T) {
 	endpoint := "http://localhost:8080"
-	rm := newResourceManager(endpoint)
+	rm := newResourceManager(endpoint, endpoint)
 	invalidID := int64(100000000)
 	_, err := rm.projectClient.Get(invalidID)
 	assert.Error(t, err)

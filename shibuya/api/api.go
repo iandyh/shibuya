@@ -63,7 +63,7 @@ func (s *ShibuyaAPI) Router() *httproute.Router {
 		if strings.Contains(r.Path, "usage") {
 			continue
 		}
-		r.HandlerFunc = authRequired(r.HandlerFunc, s.sc.AuthConfig)
+		r.HandlerFunc = authRequired(r.HandlerFunc)
 	}
 	return apiRouter
 }

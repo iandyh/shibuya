@@ -73,6 +73,7 @@ func (cc *CollectionClient) Subscribe(collectionID int64) (*es.Stream, context.C
 	ctx, cancel := context.WithCancel(req.Context())
 	req = req.WithContext(ctx)
 	httpClient := &http.Client{}
+	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", cc.ClientOpts.Token))
 	stream, err := es.SubscribeWith("", httpClient, req)
 	if err != nil {
 		cancel()
