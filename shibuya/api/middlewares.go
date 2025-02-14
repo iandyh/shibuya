@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -31,11 +30,6 @@ func authWithSession(r *http.Request) (*model.Account, error) {
 		return nil, makeLoginError()
 	}
 	return account, nil
-}
-
-// TODO add JWT token auth in the future
-func authWithToken(_ *http.Request) (*model.Account, error) {
-	return nil, errors.New("No token presented")
 }
 
 func authRequired(next http.HandlerFunc) http.HandlerFunc {
