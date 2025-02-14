@@ -11,10 +11,21 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rakutentech/shibuya/shibuya/api"
 	"github.com/rakutentech/shibuya/shibuya/config"
+	httpauth "github.com/rakutentech/shibuya/shibuya/http/auth"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/model"
 	"github.com/rakutentech/shibuya/shibuya/ui"
 	_ "go.uber.org/automaxprocs"
+)
+
+var (
+	excludedPaths = map[string]struct{}{
+		"/metrics": {},
+		"/health":  {},
+	}
+	excludedKeywords = []string{
+		"stream",
+	}
 )
 
 func main() {
@@ -36,7 +47,8 @@ func main() {
 		w.Write([]byte("Alive"))
 	}))
 	handler := http.Handler(mux)
-	handler = api.RequestLoggerWithoutPaths(handler)(handler)
+
+	handler = httpauth.RequestLoggerWithoutPaths(handler)(handler)
 	middlewares := []func(http.Handler) http.Handler{
 		middleware.RequestID,
 		middleware.RealIP,
@@ -46,6 +58,6 @@ func main() {
 	}
 	// This should be the last one to be wrapper in order to pass the context to
 	// future middlewares
-	handler = api.ExcludePathsFromLogger(handler)(handler)
+	handler = httpauth.ExcludePathsFromLogger(handler, excludedPaths, excludedKeywords)(handler)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8080), context.ClearHandler(handler)))
 }
