@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/controller"
@@ -59,11 +58,7 @@ func (s *ShibuyaAPI) Router() *httproute.Router {
 		apiRouter.Mount(ac.Router())
 	}
 	for _, r := range apiRouter.GetRoutes() {
-		// TODO! We don't require auth for usage endpoint for now.
-		if strings.Contains(r.Path, "usage") {
-			continue
-		}
-		r.HandlerFunc = authRequired(r.HandlerFunc)
+		r.HandlerFunc = sessionRequired(r.HandlerFunc)
 	}
 	return apiRouter
 }

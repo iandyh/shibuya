@@ -2,37 +2,62 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
-	"strings"
 
-	"github.com/go-chi/chi/v5/middleware"
+	httpauth "github.com/rakutentech/shibuya/shibuya/http/auth"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
 const (
-	accountKey    = "account"
-	isExcludedKey = "isExcluded"
+	accountKey = "account"
 )
 
-var (
-	excludedPaths = map[string]struct{}{
-		"/metrics": {},
-		"/health":  {},
+func FindTokenFromHeaders(r *http.Request) (string, error) {
+	cookie, err := r.Cookie(authtoken.CookieName)
+	if err != nil {
+		if errors.Is(err, http.ErrNoCookie) {
+			bearer := r.Header.Get(httpauth.AuthHeader)
+			return httpauth.FindToken(bearer)
+		}
+		return "", err
 	}
-	excludedKeywords = []string{
-		"stream",
+	return cookie.Value, nil
+}
+
+func GetAccountBySession(r *http.Request) *model.Account {
+	a := new(model.Account)
+	a.MLMap = make(map[string]interface{})
+	tokenString, err := FindTokenFromHeaders(r)
+	if err != nil {
+		return nil
 	}
-)
+	token, err := authtoken.VerifyJWT(tokenString, "", "")
+	if err != nil {
+		return nil
+	}
+	tokenClaim, err := authtoken.FindTokenClaim(token)
+	if err != nil {
+		return nil
+	}
+	a.Name = tokenClaim.Username
+	a.ML = tokenClaim.Groups
+	for _, m := range a.ML {
+		a.MLMap[m] = struct{}{}
+	}
+	return a
+}
 
 func authWithSession(r *http.Request) (*model.Account, error) {
-	account := model.GetAccountBySession(r)
+	account := GetAccountBySession(r)
 	if account == nil {
 		return nil, makeLoginError()
 	}
 	return account, nil
 }
 
-func authRequired(next http.HandlerFunc) http.HandlerFunc {
+func sessionRequired(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var account *model.Account
 		var err error
@@ -45,41 +70,4 @@ func authRequired(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
-func RequestLoggerWithoutPaths(next http.Handler) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		fn := func(w http.ResponseWriter, r *http.Request) {
-			isExcluded := r.Context().Value(isExcludedKey).(bool)
-			if !isExcluded {
-				middleware.Logger(next).ServeHTTP(w, r)
-				return
-			}
-			next.ServeHTTP(w, r)
-		}
-		return http.HandlerFunc(fn)
-	}
-}
-
 // This should be the last middleware to be wrapper
-func ExcludePathsFromLogger(next http.Handler) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		fn := func(w http.ResponseWriter, r *http.Request) {
-			isExcluded := false
-			if _, ok := excludedPaths[r.URL.Path]; ok {
-				isExcluded = true
-			}
-			// This should be used with care for two reasons
-			// 1. Since every request goes through the check, string.Contains is slow
-			// 2. Using keyword based approach is not an exact match, so it could kill other requests
-			// that contain the same keyword
-			for _, k := range excludedKeywords {
-				if strings.Contains(r.URL.Path, k) {
-					isExcluded = true
-					break
-				}
-			}
-			contextR := r.WithContext(context.WithValue(r.Context(), isExcludedKey, isExcluded))
-			next.ServeHTTP(w, contextR)
-		}
-		return http.HandlerFunc(fn)
-	}
-}

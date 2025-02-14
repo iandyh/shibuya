@@ -5,11 +5,11 @@ import (
 	"html/template"
 	"net/http"
 
+	"github.com/rakutentech/shibuya/shibuya/api"
 	"github.com/rakutentech/shibuya/shibuya/auth"
 	"github.com/rakutentech/shibuya/shibuya/config"
 	"github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
-	"github.com/rakutentech/shibuya/shibuya/model"
 )
 
 type UI struct {
@@ -55,7 +55,7 @@ type HomeResp struct {
 }
 
 func (u *UI) homeHandler(w http.ResponseWriter, r *http.Request) {
-	account := model.GetAccountBySession(r)
+	account := api.GetAccountBySession(r)
 	if account == nil {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
