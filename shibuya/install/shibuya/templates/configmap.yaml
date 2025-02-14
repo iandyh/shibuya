@@ -8,12 +8,15 @@ data:
         "enable_sid": true,
         "distributed_mode": {{ .Values.runtime.distributed_mode }},
         "auth_config": {
+            "ldap_config": {
+                "enabled": {{ .Values.runtime.auth_config.ldap_config.enabled}},
+                "ldap_server": {{ .Values.runtime.auth_config.ldap_config.ldap_server | quote }},
+                "ldap_port": {{ .Values.runtime.auth_config.ldap_config.ldap_port | quote }},
+                "system_user": {{ .Values.runtime.auth_config.ldap_config.system_user | quote }},
+                "system_password": {{ .Values.runtime.auth_config.ldap_config.system_password | quote }},
+                "base_dn": {{ .Values.runtime.auth_config.ldap_config.base_dn | quote }}
+            },
             "admin_users": {{ .Values.runtime.auth_config.admin_users | toJson }},
-            "ldap_server": {{ .Values.runtime.auth_config.ldap_server | quote }},
-            "ldap_port": {{ .Values.runtime.auth_config.ldap_port | quote }},
-            "system_user": {{ .Values.runtime.auth_config.system_user | quote }},
-            "system_password": {{ .Values.runtime.auth_config.system_password | quote }},
-            "base_dn": {{ .Values.runtime.auth_config.base_dn | quote }},
             "oauth_logins": {{ .Values.runtime.auth_config.oauth_logins | toJson }},
             "no_auth": {{ .Values.runtime.auth_config.no_auth }}
         },

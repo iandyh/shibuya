@@ -55,7 +55,7 @@ func (a *Account) IsAdmin(authConfig *config.AuthConfig) bool {
 	}
 	// systemuser is the user used for LDAP auth. If a user login with that account
 	// we can also treat it as a admin
-	if a.Name == authConfig.SystemUser {
+	if a.Name == authConfig.LdapConfig.SystemUser {
 		return true
 	}
 	return false

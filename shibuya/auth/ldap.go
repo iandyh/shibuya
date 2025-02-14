@@ -15,22 +15,18 @@ var (
 	MLKey      = "ml"
 )
 
-type AuthResult struct {
-	ML []string
-}
-
 type LdapAuth struct {
 	config.LdapConfig
 }
 
-func NewLdapAuth(c config.LdapConfig) LdapAuth {
+func NewLdapAuth[C config.InputBackendConf](c C) InputRequiredAuth {
 	return LdapAuth{
-		LdapConfig: c,
+		LdapConfig: config.LdapConfig(*c),
 	}
 }
 
-func (la *LdapAuth) Auth(username, password string) (*AuthResult, error) {
-	r := new(AuthResult)
+func (la LdapAuth) ValidateInput(username, password string) (AuthResult, error) {
+	r := AuthResult{}
 	ldapServer := la.LdapServer
 	ldapPort := la.LdapPort
 	baseDN := la.BaseDN

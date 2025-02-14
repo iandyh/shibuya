@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	ConfigFileName     = "config.json"
-	AuthProviderGoogle = "google"
+	ConfigFileName      = "config.json"
+	AuthProviderGoogle  = "google"
+	LDAPAuthBackend     = "ldap"
+	DatabaseAuthBackend = "database"
 )
 
 var (
@@ -27,6 +29,7 @@ var (
 )
 
 type LdapConfig struct {
+	Enabled        bool   `json:"enabled"`
 	BaseDN         string `json:"base_dn"`
 	SystemUser     string `json:"system_user"`
 	SystemPassword string `json:"system_password"`
@@ -47,13 +50,24 @@ type GoogleOauth struct {
 	Scopes []string
 }
 
+type InputBackendConf interface {
+	*LdapConfig
+}
+
 type AuthConfig struct {
 	AdminUsers        []string               `json:"admin_users"`
 	NoAuth            bool                   `json:"no_auth"`
 	EnableGoogleLogin bool                   `json:"enable_google_login"`
 	OauthLogins       map[string]OauthClient `json:"oauth_logins"`
 	OauthProvider     map[string]oauth2.Config
-	*LdapConfig
+	LdapConfig        LdapConfig `json:"ldap_config"`
+}
+
+func GetInputAuthBackend[conf InputBackendConf](ac AuthConfig) (string, conf) {
+	if ac.LdapConfig.Enabled {
+		return LDAPAuthBackend, &ac.LdapConfig
+	}
+	return DatabaseAuthBackend, nil
 }
 
 type ClusterConfig struct {

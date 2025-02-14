@@ -62,12 +62,15 @@ runtime:
   distributed_mode: true
   auth_config:
     admin_users: []
-    ldap_server: ""
-    ldap_port: ""
-    system_user: ""
-    system_password: ""
-    base_dn: ""
     no_auth: true
+    ldap_config:
+      enabled: false
+      ldap_server: ""
+      ldap_port: ""
+      system_user: ""
+      system_password: ""
+      base_dn: ""
+
     oauth_logins:
       google:
         enabled: false

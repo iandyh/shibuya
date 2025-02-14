@@ -15,7 +15,7 @@ import (
 type UI struct {
 	sc         config.ShibuyaConfig
 	tmpl       *template.Template
-	authMethod auth.LdapAuth
+	authMethod auth.InputRequiredAuth
 }
 
 var (
@@ -31,11 +31,12 @@ func serveStaticFile(w http.ResponseWriter, req *http.Request) {
 }
 
 func NewUI(sc config.ShibuyaConfig) *UI {
-	authMethod := auth.NewLdapAuth(*sc.AuthConfig.LdapConfig)
+	authMethod, conf := config.GetInputAuthBackend(*sc.AuthConfig)
+	authFunc := auth.GetInputBackendAuthFunc(authMethod)
 	u := &UI{
 		sc:         sc,
 		tmpl:       template.Must(template.ParseGlob("/templates/*.html")),
-		authMethod: authMethod,
+		authMethod: authFunc(conf),
 	}
 	return u
 }
@@ -78,7 +79,7 @@ func (u *UI) loginHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
 	username := r.Form.Get("username")
 	password := r.Form.Get("password")
-	authResult, err := u.authMethod.Auth(username, password)
+	authResult, err := u.authMethod.ValidateInput(username, password)
 	if err != nil {
 		loginUrl := fmt.Sprintf("/login?error_msg=%v", err)
 		http.Redirect(w, r, loginUrl, http.StatusSeeOther)
