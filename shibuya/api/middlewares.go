@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	httpauth "github.com/rakutentech/shibuya/shibuya/http/auth"
 	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	"github.com/rakutentech/shibuya/shibuya/model"
 )
@@ -18,8 +17,7 @@ func FindTokenFromHeaders(r *http.Request) (string, error) {
 	cookie, err := r.Cookie(authtoken.CookieName)
 	if err != nil {
 		if errors.Is(err, http.ErrNoCookie) {
-			bearer := r.Header.Get(httpauth.AuthHeader)
-			return httpauth.FindToken(bearer)
+			return authtoken.FindBearerToken(r.Header)
 		}
 		return "", err
 	}

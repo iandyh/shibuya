@@ -2,43 +2,21 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5/middleware"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 )
 
 const (
-	AuthHeader    = "Authorization"
-	BEARER_PREFIX = "Bearer"
 	isExcludedKey = "isExcluded"
 )
 
-var (
-	EmptyTokenError = errors.New("Bearer header is empty")
-	InvalidToken    = errors.New("Token is invalid")
-)
-
-func FindToken(bearer string) (string, error) {
-	if bearer == "" {
-		return "", EmptyTokenError
-	}
-	t := strings.Split(bearer, " ")
-	if len(t) != 2 {
-		return "", InvalidToken
-	}
-	if t[0] != BEARER_PREFIX {
-		return "", InvalidToken
-	}
-	return t[1], nil
-}
-
 func AuthRequiredWithToken(next http.Handler, requiredToken string) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		bearer := r.Header.Get(AuthHeader)
-		token, err := FindToken(bearer)
+		token, err := authtoken.FindBearerToken(r.Header)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

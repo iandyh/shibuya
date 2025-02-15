@@ -12,7 +12,7 @@ import (
 	k8sDiscovery "github.com/prometheus/prometheus/discovery/kubernetes"
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/rakutentech/shibuya/shibuya/config"
-	"github.com/rakutentech/shibuya/shibuya/http/auth"
+	authtoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 )
 
 type GlobalConfig struct {
@@ -145,7 +145,7 @@ func MakeScraperConfig(apiToken, token string, collectionID int64, namespace str
 			RelabelConfigs:          rcs,
 			HTTPConfig: HTTPConfig{
 				Authorization: &Authorization{
-					Type:        auth.BEARER_PREFIX,
+					Type:        authtoken.BEARER_PREFIX,
 					Credentials: token,
 				},
 			},

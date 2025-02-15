@@ -1,6 +1,8 @@
 package token_test
 
 import (
+	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
@@ -33,4 +35,25 @@ func TestTokenCookie(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	_, err = authtoken.VerifyJWT(cookie.Value, "", "")
 	assert.Error(t, err)
+}
+
+func TestFindToken(t *testing.T) {
+	validBearer := fmt.Sprintf("%s asdf", authtoken.BEARER_PREFIX)
+	header := http.Header{}
+	header.Add(authtoken.AuthHeader, validBearer)
+	token, err := authtoken.FindBearerToken(header)
+	assert.Nil(t, err)
+	assert.Equal(t, "asdf", token)
+
+	header.Del(authtoken.AuthHeader)
+	inValidBearer := "b asdf"
+	header.Add(authtoken.AuthHeader, inValidBearer)
+	token, err = authtoken.FindBearerToken(header)
+	assert.ErrorIs(t, err, authtoken.InvalidToken)
+
+	emptyBearer := ""
+	header.Del(authtoken.AuthHeader)
+	header.Add(authtoken.AuthHeader, emptyBearer)
+	token, err = authtoken.FindBearerToken(header)
+	assert.ErrorIs(t, err, authtoken.EmptyTokenError)
 }

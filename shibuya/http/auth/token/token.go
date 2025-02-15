@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -13,7 +14,9 @@ import (
 )
 
 const (
-	CookieName = "shibuya"
+	AuthHeader    = "Authorization"
+	BEARER_PREFIX = "Bearer"
+	CookieName    = "shibuya"
 )
 
 var (
@@ -32,6 +35,8 @@ var (
 			return nil
 		},
 	}
+	EmptyTokenError = errors.New("Bearer header is empty")
+	InvalidToken    = errors.New("Token is invalid")
 )
 
 type TokenClaim struct {
@@ -107,6 +112,29 @@ func VerifyJWT(value, issuer, jwksURL string) (*jwt.Token, error) {
 	token, err := jwt.Parse(value, keyFunc(jwksURL))
 	if err != nil || !token.Valid {
 		return nil, err
+	}
+	return token, nil
+}
+
+func ParseToken(bearer string) (string, error) {
+	if bearer == "" {
+		return "", EmptyTokenError
+	}
+	t := strings.Split(bearer, " ")
+	if len(t) != 2 {
+		return "", InvalidToken
+	}
+	if t[0] != BEARER_PREFIX {
+		return "", InvalidToken
+	}
+	return t[1], nil
+}
+
+func FindBearerToken(header http.Header) (string, error) {
+	bearer := header.Get(AuthHeader)
+	token, err := ParseToken(bearer)
+	if err != nil {
+		return "", err
 	}
 	return token, nil
 }
