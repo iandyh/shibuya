@@ -71,7 +71,8 @@ func (pa *PlanAPI) Router() *httproute.Router {
 	return router
 }
 
-func getPlan(planID string) (*model.Plan, error) {
+func getPlan(r *http.Request, authConfig *config.AuthConfig) (*model.Plan, error) {
+	planID := r.PathValue("plan_id")
 	pid, err := strconv.Atoi(planID)
 	if err != nil {
 		return nil, makeInvalidResourceError("plan_id")
@@ -79,6 +80,14 @@ func getPlan(planID string) (*model.Plan, error) {
 	plan, err := model.GetPlan(int64(pid))
 	if err != nil {
 		return nil, err
+	}
+	account := r.Context().Value(accountKey).(*model.Account)
+	project, err := model.GetProject(plan.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if r := hasProjectOwnership(project, account, authConfig); !r {
+		return nil, makePlanOwnershipError()
 	}
 	return plan, nil
 }
@@ -124,7 +133,7 @@ func (pa *PlanAPI) planCreateHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pa *PlanAPI) planGetHandler(w http.ResponseWriter, r *http.Request) {
-	plan, err := getPlan(r.PathValue("plan_id"))
+	plan, err := getPlan(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -137,19 +146,9 @@ func (pa *PlanAPI) planUpdateHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (pa *PlanAPI) planDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	account := r.Context().Value(accountKey).(*model.Account)
-	plan, err := getPlan(r.PathValue("plan_id"))
+	plan, err := getPlan(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
-		return
-	}
-	project, err := model.GetProject(plan.ProjectID)
-	if err != nil {
-		handleErrors(w, err)
-		return
-	}
-	if r := hasProjectOwnership(project, account, pa.sc.AuthConfig); !r {
-		handleErrors(w, makeProjectOwnershipError())
 		return
 	}
 	using, err := plan.IsBeingUsed()
@@ -165,7 +164,7 @@ func (pa *PlanAPI) planDeleteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (pa *PlanAPI) planFilesUploadHandler(w http.ResponseWriter, r *http.Request) {
-	plan, err := getPlan(r.PathValue("plan_id"))
+	plan, err := getPlan(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -200,7 +199,7 @@ func (pa *PlanAPI) planFilesGetHandler(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (pa *PlanAPI) planFilesDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	plan, err := getPlan(r.PathValue("plan_id"))
+	plan, err := getPlan(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return

@@ -46,6 +46,10 @@ func makeCollectionOwnershipError() error {
 	return fmt.Errorf("%w%s", noPermissionErr, "You don't own the collection")
 }
 
+func makePlanOwnershipError() error {
+	return fmt.Errorf("%w%s", noPermissionErr, "You don't own the plan")
+}
+
 func handleErrorsFromExt(w http.ResponseWriter, err error) error {
 	var (
 		dbe                   *model.DBError
