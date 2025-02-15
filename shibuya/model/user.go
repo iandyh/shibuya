@@ -11,6 +11,10 @@ type Account struct {
 }
 
 func (a *Account) IsAdmin(authConfig *config.AuthConfig) bool {
+	// In some situations, we could have a nil zero config pass in.
+	if authConfig == nil {
+		return false
+	}
 	for _, ml := range a.ML {
 		for _, admin := range authConfig.AdminUsers {
 			if ml == admin {

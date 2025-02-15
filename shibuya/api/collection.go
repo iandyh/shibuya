@@ -176,14 +176,22 @@ func (ca *CollectionAPI) Router() *httproute.Router {
 	return router
 }
 
-func getCollection(collectionID string) (*model.Collection, error) {
-	cid, err := strconv.Atoi(collectionID)
+func getCollection(r *http.Request, authConfig *config.AuthConfig) (*model.Collection, error) {
+	cid, err := strconv.Atoi(r.PathValue("collection_id"))
 	if err != nil {
 		return nil, makeInvalidResourceError("collection_id")
 	}
 	collection, err := model.GetCollection(int64(cid))
 	if err != nil {
 		return nil, err
+	}
+	account := r.Context().Value(accountKey).(*model.Account)
+	project, err := model.GetProject(collection.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if r := hasProjectOwnership(project, account, authConfig); !r {
+		return nil, makeCollectionOwnershipError()
 	}
 	return collection, nil
 }
@@ -243,7 +251,7 @@ func (ca *CollectionAPI) collectionCreateHandler(w http.ResponseWriter, r *http.
 }
 
 func (ca *CollectionAPI) collectionGetHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -259,7 +267,7 @@ func (ca *CollectionAPI) collectionUpdateHandler(w http.ResponseWriter, _ *http.
 }
 
 func (ca *CollectionAPI) collectionDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -281,7 +289,7 @@ func (ca *CollectionAPI) collectionDeleteHandler(w http.ResponseWriter, r *http.
 }
 
 func (ca *CollectionAPI) collectionUploadHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -372,7 +380,7 @@ func (ca *CollectionAPI) collectionUploadHandler(w http.ResponseWriter, r *http.
 }
 
 func (ca *CollectionAPI) collectionConfigGetHandler(w http.ResponseWriter, req *http.Request) {
-	collection, err := hasCollectionOwnership(req, ca.sc.AuthConfig)
+	collection, err := getCollection(req, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -417,7 +425,7 @@ func (ca *CollectionAPI) collectionFilesGetHandler(w http.ResponseWriter, _ *htt
 }
 
 func (ca *CollectionAPI) collectionFilesUploadHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -437,7 +445,7 @@ func (ca *CollectionAPI) collectionFilesUploadHandler(w http.ResponseWriter, r *
 }
 
 func (ca *CollectionAPI) collectionFilesDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -457,7 +465,7 @@ func (ca *CollectionAPI) collectionFilesDeleteHandler(w http.ResponseWriter, r *
 }
 
 func (ca *CollectionAPI) collectionEnginesDetailHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -471,7 +479,7 @@ func (ca *CollectionAPI) collectionEnginesDetailHandler(w http.ResponseWriter, r
 }
 
 func (ca *CollectionAPI) collectionDeploymentHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -495,7 +503,7 @@ func (ca *CollectionAPI) collectionDeploymentHandler(w http.ResponseWriter, r *h
 }
 
 func (ca *CollectionAPI) collectionTriggerHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -507,7 +515,7 @@ func (ca *CollectionAPI) collectionTriggerHandler(w http.ResponseWriter, r *http
 }
 
 func (ca *CollectionAPI) collectionTermHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -519,7 +527,7 @@ func (ca *CollectionAPI) collectionTermHandler(w http.ResponseWriter, r *http.Re
 }
 
 func (ca *CollectionAPI) collectionPurgeHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -539,7 +547,7 @@ func (ca *CollectionAPI) runDeleteHandler(w http.ResponseWriter, _ *http.Request
 }
 
 func (ca *CollectionAPI) collectionStatusHandler(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -553,7 +561,7 @@ func (ca *CollectionAPI) collectionStatusHandler(w http.ResponseWriter, r *http.
 }
 
 func (ca *CollectionAPI) streamCollectionMetrics(w http.ResponseWriter, r *http.Request) {
-	collection, err := hasCollectionOwnership(r, ca.sc.AuthConfig)
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -601,17 +609,17 @@ func (ca *CollectionAPI) streamCollectionMetrics(w http.ResponseWriter, r *http.
 }
 
 func (ca *CollectionAPI) planLogHandler(w http.ResponseWriter, r *http.Request) {
-	collectionID, err := strconv.Atoi(r.PathValue("collection_id"))
+	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, makeInvalidResourceError("collection_id"))
 		return
 	}
-	planID, err := strconv.Atoi(r.PathValue("plan_id"))
+	plan, err := getPlan(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, makeInvalidResourceError("plan_id"))
 		return
 	}
-	content, err := ca.ctr.Scheduler.DownloadPodLog(int64(collectionID), int64(planID))
+	content, err := ca.ctr.Scheduler.DownloadPodLog(collection.ID, plan.ID)
 	if err != nil {
 		handleErrors(w, makeInvalidRequestError(err.Error()))
 		return

@@ -22,7 +22,8 @@ func (mg *MetricsGateway) rewrite(r *httputil.ProxyRequest) {
 	if collectionID == "" {
 		return
 	}
-	_, err := getCollection(collectionID)
+	// We disallow admin to write metrics.  so a nil authconfig is provided here
+	_, err := getCollection(r.In, nil)
 	if err != nil {
 		return
 	}
