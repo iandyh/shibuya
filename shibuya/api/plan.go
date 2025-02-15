@@ -82,27 +82,17 @@ func getPlan(r *http.Request, authConfig *config.AuthConfig) (*model.Plan, error
 		return nil, err
 	}
 	account := r.Context().Value(accountKey).(*model.Account)
-	project, err := model.GetProject(plan.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	if r := hasProjectOwnership(project, account, authConfig); !r {
+	if _, err := getProject(plan.ProjectID, account, authConfig); err != nil {
 		return nil, makePlanOwnershipError()
 	}
 	return plan, nil
 }
 
 func (pa *PlanAPI) planCreateHandler(w http.ResponseWriter, r *http.Request) {
-	account := r.Context().Value(accountKey).(*model.Account)
 	r.ParseForm()
-	projectID := r.Form.Get("project_id")
-	project, err := getProject(projectID)
+	project, err := getProjectFromForm(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
-		return
-	}
-	if r := hasProjectOwnership(project, account, pa.sc.AuthConfig); !r {
-		handleErrors(w, makeProjectOwnershipError())
 		return
 	}
 	name := r.Form.Get("name")

@@ -186,12 +186,8 @@ func getCollection(r *http.Request, authConfig *config.AuthConfig) (*model.Colle
 		return nil, err
 	}
 	account := r.Context().Value(accountKey).(*model.Account)
-	project, err := model.GetProject(collection.ProjectID)
-	if err != nil {
+	if _, err := getProject(collection.ProjectID, account, authConfig); err != nil {
 		return nil, err
-	}
-	if r := hasProjectOwnership(project, account, authConfig); !r {
-		return nil, makeCollectionOwnershipError()
 	}
 	return collection, nil
 }
@@ -220,21 +216,15 @@ func hasInvalidDiff(curr, updated []*model.ExecutionPlan) (bool, string) {
 }
 
 func (ca *CollectionAPI) collectionCreateHandler(w http.ResponseWriter, r *http.Request) {
-	account := r.Context().Value(accountKey).(*model.Account)
 	r.ParseForm()
 	collectionName := r.Form.Get("name")
 	if collectionName == "" {
 		handleErrors(w, makeInvalidRequestError("collection name cannot be empty"))
 		return
 	}
-	projectID := r.Form.Get("project_id")
-	project, err := getProject(projectID)
+	project, err := getProjectFromForm(r, ca.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
-		return
-	}
-	if r := hasProjectOwnership(project, account, ca.sc.AuthConfig); !r {
-		handleErrors(w, makeProjectOwnershipError())
 		return
 	}
 	collectionID, err := model.CreateCollection(collectionName, project.ID)

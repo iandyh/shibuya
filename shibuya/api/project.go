@@ -55,19 +55,35 @@ func (pa *ProjectAPI) Router() *httproute.Router {
 	return router
 }
 
-func getProject(projectID string) (*model.Project, error) {
-	if projectID == "" {
-		return nil, makeInvalidRequestError("project_id cannot be empty")
-	}
-	pid, err := strconv.Atoi(projectID)
-	if err != nil {
-		return nil, makeInvalidResourceError("project_id")
-	}
-	project, err := model.GetProject(int64(pid))
+func getProject(projectID int64, account *model.Account, authConfig *config.AuthConfig) (*model.Project, error) {
+	project, err := model.GetProject(projectID)
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := account.MLMap[project.Owner]; !ok {
+		if !account.IsAdmin(authConfig) {
+			return nil, makeProjectOwnershipError()
+		}
+	}
 	return project, nil
+}
+
+func getProjectFromPath(r *http.Request, authConfig *config.AuthConfig) (*model.Project, error) {
+	pid, err := strconv.Atoi(r.PathValue("project_id"))
+	if err != nil {
+		return nil, makeInvalidResourceError("project_id")
+	}
+	account := r.Context().Value(accountKey).(*model.Account)
+	return getProject(int64(pid), account, authConfig)
+}
+
+func getProjectFromForm(r *http.Request, authConfig *config.AuthConfig) (*model.Project, error) {
+	pid, err := strconv.Atoi(r.Form.Get("project_id"))
+	if err != nil {
+		return nil, makeInvalidResourceError("project_id")
+	}
+	account := r.Context().Value(accountKey).(*model.Account)
+	return getProject(int64(pid), account, authConfig)
 }
 
 func (pa *ProjectAPI) projectCreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +130,7 @@ func (pa *ProjectAPI) projectCreateHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (pa *ProjectAPI) projectGetHandler(w http.ResponseWriter, r *http.Request) {
-	project, err := getProject(r.PathValue("project_id"))
+	project, err := getProjectFromPath(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
 		return
@@ -127,14 +143,9 @@ func (pa *ProjectAPI) projectUpdateHandler(w http.ResponseWriter, _ *http.Reques
 }
 
 func (pa *ProjectAPI) projectDeleteHandler(w http.ResponseWriter, r *http.Request) {
-	account := r.Context().Value(accountKey).(*model.Account)
-	project, err := getProject(r.PathValue("project_id"))
+	project, err := getProjectFromPath(r, pa.sc.AuthConfig)
 	if err != nil {
 		handleErrors(w, err)
-		return
-	}
-	if r := hasProjectOwnership(project, account, pa.sc.AuthConfig); !r {
-		handleErrors(w, makeProjectOwnershipError())
 		return
 	}
 	collectionIDs, err := project.GetCollections()
