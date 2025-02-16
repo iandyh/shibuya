@@ -27,9 +27,9 @@ type resourceManager struct {
 	planClient       *client.PlanClient
 }
 
-func fetchToken(endpoint string) (string, error) {
+func fetchToken(endpoint, username string) (string, error) {
 	form := url.Values{}
-	form.Add("username", "shibuya")
+	form.Add("username", username)
 	form.Add("password", "test")
 	req, err := http.NewRequest("POST", fmt.Sprintf("%s/login", endpoint), strings.NewReader(form.Encode()))
 	if err != nil {
@@ -55,7 +55,7 @@ func fetchToken(endpoint string) (string, error) {
 }
 
 func newResourceManager(endpoint, url string) *resourceManager {
-	token, err := fetchToken(url)
+	token, err := fetchToken(url, "shibuya")
 	if err != nil {
 		log.Fatal(err)
 	}
