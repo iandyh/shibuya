@@ -36,13 +36,13 @@ func NewAPIServer(sc config.ShibuyaConfig) *ShibuyaAPI {
 	return c
 }
 
-func (s *ShibuyaAPI) Router() *httproute.Router {
-	projectAPI := NewProjectAPI(s.sc)
-	planAPI := NewPlanAPI(s.sc, s.objStorage)
-	collectionAPI := NewCollectionAPI(s.sc, s.objStorage, s.ctr)
+func MakeRouter(sc config.ShibuyaConfig, objStorage object_storage.StorageInterface, ctr *controller.Controller) *httproute.Router {
+	projectAPI := NewProjectAPI(sc)
+	planAPI := NewPlanAPI(sc, objStorage)
+	collectionAPI := NewCollectionAPI(sc, objStorage, ctr)
 	usageAPI := NewUsageAPI()
-	adminAPI := NewAdminAPI(s.sc.Context)
-	metricsGateway := NewMetricsGateway(s.sc.MetricStorage)
+	adminAPI := NewAdminAPI(sc.Context)
+	metricsGateway := NewMetricsGateway(sc.MetricStorage)
 	apiComponents := []ShibuyaAPIComponent{
 		projectAPI,
 		planAPI,
@@ -59,4 +59,8 @@ func (s *ShibuyaAPI) Router() *httproute.Router {
 		r.HandlerFunc = sessionRequired(r.HandlerFunc)
 	}
 	return apiRouter
+}
+
+func (s *ShibuyaAPI) Router() *httproute.Router {
+	return MakeRouter(s.sc, s.objStorage, s.ctr)
 }
