@@ -11,13 +11,14 @@ import (
 )
 
 var (
+	unAnthorizedErr   = errors.New("401")
 	noPermissionErr   = errors.New("403-")
 	invalidRequestErr = errors.New("400-")
 	ServerErr         = errors.New("500-")
 )
 
 func makeLoginError() error {
-	return fmt.Errorf("%wyou need to login", noPermissionErr)
+	return fmt.Errorf("%wyou need to login", unAnthorizedErr)
 }
 
 func makeInvalidRequestError(message string) error {
@@ -72,6 +73,8 @@ func handleErrors(w http.ResponseWriter, err error) {
 	unhandledError := handleErrorsFromExt(w, err)
 	if unhandledError != nil { // if unhandleError is not nil, it's the same as original error
 		switch {
+		case errors.Is(err, unAnthorizedErr):
+			makeFailMessage(w, err.Error(), http.StatusUnauthorized)
 		case errors.Is(err, noPermissionErr):
 			makeFailMessage(w, err.Error(), http.StatusForbidden)
 		case errors.Is(err, invalidRequestErr):
