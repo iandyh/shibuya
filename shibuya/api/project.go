@@ -43,6 +43,7 @@ func (pa *ProjectAPI) Router() *httproute.Router {
 		{
 			Name:        "Update a project",
 			Method:      "PUT",
+			Path:        "{project_id}",
 			HandlerFunc: pa.projectUpdateHandler,
 		},
 		{

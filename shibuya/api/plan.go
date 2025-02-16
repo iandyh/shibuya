@@ -41,6 +41,7 @@ func (pa *PlanAPI) Router() *httproute.Router {
 		{
 			Name:        "Update a plan",
 			Method:      "PUT",
+			Path:        "{plan_id}",
 			HandlerFunc: pa.planUpdateHandler,
 		},
 		{

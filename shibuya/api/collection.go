@@ -608,12 +608,12 @@ func (ca *CollectionAPI) streamCollectionMetrics(w http.ResponseWriter, r *http.
 func (ca *CollectionAPI) planLogHandler(w http.ResponseWriter, r *http.Request) {
 	collection, err := getCollection(r, ca.sc.AuthConfig)
 	if err != nil {
-		handleErrors(w, makeInvalidResourceError("collection_id"))
+		handleErrors(w, err)
 		return
 	}
 	plan, err := getPlan(r, ca.sc.AuthConfig)
 	if err != nil {
-		handleErrors(w, makeInvalidResourceError("plan_id"))
+		handleErrors(w, err)
 		return
 	}
 	content, err := ca.ctr.Scheduler.DownloadPodLog(collection.ID, plan.ID)
