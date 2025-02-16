@@ -268,7 +268,7 @@ outer:
 }
 
 func (c *Collection) MakeFileName(filename string) string {
-	return fmt.Sprintf("collection/%d/%s", c.ID, filename)
+	return fmt.Sprintf("collections/%d/files/%s", c.ID, filename)
 }
 
 func (c *Collection) StoreFile(objStorage object_storage.StorageInterface, filename string, content io.ReadCloser) error {

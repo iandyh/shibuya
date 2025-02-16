@@ -52,8 +52,8 @@ func (pa *PlanAPI) Router() *httproute.Router {
 		{
 			Name:        "Get a plan files",
 			Method:      "GET",
-			Path:        "{plan_id}/files",
-			HandlerFunc: pa.planFilesGetHandler,
+			Path:        "{plan_id}/files/{name}",
+			HandlerFunc: pa.planFilesDownloadHandler,
 		},
 		{
 			Name:        "Upload files in a plan",
@@ -184,8 +184,15 @@ func (pa *PlanAPI) planFilesUploadHandler(w http.ResponseWriter, r *http.Request
 	w.Write([]byte("success"))
 }
 
-func (pa *PlanAPI) planFilesGetHandler(w http.ResponseWriter, _ *http.Request) {
-	renderJSON(w, http.StatusNotImplemented, nil)
+func (pa *PlanAPI) planFilesDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	plan, err := getPlan(r, pa.sc.AuthConfig)
+	if err != nil {
+		handleErrors(w, err)
+		return
+	}
+	name := r.PathValue("name")
+	filename := plan.MakeFileName(name)
+	serveFile(pa.objStorage, w, r, filename)
 }
 
 func (pa *PlanAPI) planFilesDeleteHandler(w http.ResponseWriter, r *http.Request) {

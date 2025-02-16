@@ -150,7 +150,7 @@ func (p *Plan) Delete(objStorage object_storage.StorageInterface) error {
 }
 
 func (p *Plan) MakeFileName(filename string) string {
-	return fmt.Sprintf("plan/%d/%s", p.ID, filename)
+	return fmt.Sprintf("plans/%d/files/%s", p.ID, filename)
 }
 
 func (p *Plan) IsTestFile(filename string) bool {

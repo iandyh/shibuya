@@ -112,8 +112,8 @@ func fileDeleteHandler(w http.ResponseWriter, r *http.Request, params httprouter
 }
 func main() {
 	r := httprouter.New()
-	r.GET("/:kind/:folder/:file", fileGetHandler)
-	r.PUT("/:kind/:folder/:file", filePutHandler)
-	r.DELETE("/:kind/:folder/:file", fileDeleteHandler)
+	r.GET("/:kind/:folder/files/:file", fileGetHandler)
+	r.PUT("/:kind/:folder/files/:file", filePutHandler)
+	r.DELETE("/:kind/:folder/files/:file", fileDeleteHandler)
 	log.Fatal(http.ListenAndServe(":8080", r))
 }

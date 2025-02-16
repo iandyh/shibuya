@@ -16,5 +16,5 @@ func inArray(s []string, item string) bool {
 }
 
 func makeFilesUrl(filename string) string {
-	return fmt.Sprintf("/api/files/%s", filename)
+	return fmt.Sprintf("/api/%s", filename)
 }

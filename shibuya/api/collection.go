@@ -72,8 +72,8 @@ func (ca *CollectionAPI) Router() *httproute.Router {
 		{
 			Name:        "Get a collection files",
 			Method:      "GET",
-			Path:        "{collection_id}/files",
-			HandlerFunc: ca.collectionFilesGetHandler,
+			Path:        "{collection_id}/files/{name}",
+			HandlerFunc: ca.collectionFilesDownloadHandler,
 		},
 		{
 			Name:        "Delete a collection files",
@@ -410,8 +410,15 @@ func (ca *CollectionAPI) collectionConfigGetHandler(w http.ResponseWriter, req *
 	http.ServeContent(w, req, filename, time.Now(), r)
 }
 
-func (ca *CollectionAPI) collectionFilesGetHandler(w http.ResponseWriter, _ *http.Request) {
-	renderJSON(w, http.StatusNotImplemented, nil)
+func (ca *CollectionAPI) collectionFilesDownloadHandler(w http.ResponseWriter, r *http.Request) {
+	collection, err := getCollection(r, ca.sc.AuthConfig)
+	if err != nil {
+		handleErrors(w, err)
+		return
+	}
+	name := r.PathValue("name")
+	filename := collection.MakeFileName(name)
+	serveFile(ca.objStorage, w, r, filename)
 }
 
 func (ca *CollectionAPI) collectionFilesUploadHandler(w http.ResponseWriter, r *http.Request) {

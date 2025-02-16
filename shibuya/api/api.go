@@ -40,7 +40,6 @@ func (s *ShibuyaAPI) Router() *httproute.Router {
 	projectAPI := NewProjectAPI(s.sc)
 	planAPI := NewPlanAPI(s.sc, s.objStorage)
 	collectionAPI := NewCollectionAPI(s.sc, s.objStorage, s.ctr)
-	fileAPI := NewFileAPI(s.objStorage)
 	usageAPI := NewUsageAPI()
 	adminAPI := NewAdminAPI(s.sc.Context)
 	metricsGateway := NewMetricsGateway(s.sc.MetricStorage)
@@ -48,7 +47,6 @@ func (s *ShibuyaAPI) Router() *httproute.Router {
 		projectAPI,
 		planAPI,
 		collectionAPI,
-		fileAPI,
 		usageAPI,
 		adminAPI,
 		metricsGateway,
