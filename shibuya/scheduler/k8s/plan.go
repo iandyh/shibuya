@@ -43,11 +43,10 @@ func (plan planResource) makePlanDeployment(replicas int, serviceIP string,
 					Labels: labels,
 				},
 				Spec: apiv1.PodSpec{
-					Affinity:                      affinity,
-					Tolerations:                   tolerations,
-					AutomountServiceAccountToken:  &t,
-					TerminationGracePeriodSeconds: new(int64),
-					HostAliases:                   makeHostAliases(sc.ExecutorConfig.HostAliases),
+					Affinity:                     affinity,
+					Tolerations:                  tolerations,
+					AutomountServiceAccountToken: &t,
+					HostAliases:                  makeHostAliases(sc.ExecutorConfig.HostAliases),
 					Containers: []apiv1.Container{
 						{
 							Name:            planName,

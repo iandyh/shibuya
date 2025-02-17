@@ -1,10 +1,13 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"os/signal"
 	"path"
 	"strings"
 	"time"
@@ -15,6 +18,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
 	"github.com/rakutentech/shibuya/shibuya/http/auth"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
+	httpserver "github.com/rakutentech/shibuya/shibuya/http/server"
 	pubsub "github.com/reqfleet/pubsub/server"
 	log "github.com/sirupsen/logrus"
 )
@@ -28,6 +32,7 @@ type ShibuyaCoordinator struct {
 	inventory *upstream.Inventory
 	Handler   http.Handler
 	cc        CoordinatorConfig
+	ctx       context.Context
 }
 
 var tr = &http.Transport{
@@ -87,10 +92,20 @@ func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 		Mode:     pubsub.TCP,
 		Password: cc.APIKey,
 	}
-	pub := pubsub.NewPubSubServer(serverOpts)
-	go pub.Listen()
-
 	s := &ShibuyaCoordinator{inventory: inventory}
+	pub := pubsub.NewPubSubServer(serverOpts)
+	ctx, cancel := context.WithCancel(context.TODO())
+	s.ctx = ctx
+	go func() {
+		go func() {
+			sig := make(chan os.Signal, 1)
+			signal.Notify(sig, httpserver.STOPSIGNALS...)
+			<-sig
+			pub.Shutdown()
+			cancel()
+		}()
+		pub.Listen()
+	}()
 	go s.inventory.MakeInventory(cc.ProjectID)
 	rp := httputil.ReverseProxy{
 		Rewrite:   s.rewriteURL,
@@ -149,8 +164,12 @@ func (sic *ShibuyaCoordinator) rewriteURL(r *httputil.ProxyRequest) {
 
 func (s *ShibuyaCoordinator) ListenHTTP() error {
 	cc := s.cc
-	if cc.EnableTLS {
-		return http.ListenAndServeTLS(cc.ListenAddr, certFile, keyFile, s.Handler)
+	server := &http.Server{
+		Addr:    cc.ListenAddr,
+		Handler: s.Handler,
 	}
-	return http.ListenAndServe(cc.ListenAddr, s.Handler)
+	if cc.EnableTLS {
+		return httpserver.StartServer(server, certFile, keyFile, s.ctx)
+	}
+	return httpserver.StartServer(server, "", "", s.ctx)
 }

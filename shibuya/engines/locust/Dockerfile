@@ -19,7 +19,5 @@ RUN mkdir $AGENT_ROOT/test-conf $AGENT_ROOT/test-result
 ADD build/locust-agent /usr/local/bin/locust-agent
 
 # need below line to stop locust running when the container starts
-ENTRYPOINT []
-
-CMD ["locust-agent"]
+ENTRYPOINT ["sh", "-c", "exec locust-agent"]
 

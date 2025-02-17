@@ -133,11 +133,10 @@ func (p projectResource) makeCoordinatorDeployment(serviceAccount, image, cpu, m
 					},
 				},
 				Spec: apiv1.PodSpec{
-					Tolerations:                   tolerations,
-					ServiceAccountName:            serviceAccount,
-					TerminationGracePeriodSeconds: new(int64),
-					AutomountServiceAccountToken:  &t,
-					Volumes:                       volumes,
+					Tolerations:                  tolerations,
+					ServiceAccountName:           serviceAccount,
+					AutomountServiceAccountToken: &t,
+					Volumes:                      volumes,
 					Containers: []apiv1.Container{
 						{
 							Name:  smodel.IngressController,

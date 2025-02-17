@@ -10,6 +10,6 @@ ENV env ${env}
 
 COPY ./ui/ /
 ENV binary=${binary_name}
-CMD ${binary}
+ENTRYPOINT ["/bin/sh", "-c", "exec ${binary}"]
 
 USER ${USER}

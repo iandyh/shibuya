@@ -24,4 +24,4 @@ ADD build/shibuya-agent $AGENT_ROOT/shibuya-agent
 ADD engines/jmeter/shibuya.properties $AGENT_ROOT/test-conf/shibuya.properties
 ADD engines/jmeter/jmeter.sh $AGENT_ROOT/apache-jmeter-${JMETER_VERSION}/bin/jmeter
 
-CMD ["sh", "-c", "$AGENT_ROOT/shibuya-agent"]
+ENTRYPOINT ["sh", "-c", "exec $AGENT_ROOT/shibuya-agent"]
