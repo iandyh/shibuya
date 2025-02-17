@@ -82,13 +82,13 @@ func testOwnershipEndpoints(t *testing.T, e *httpexpect.Expect, projectID, colle
 }
 
 func TestAPIWithoutSession(t *testing.T) {
-	endpoint := "http://localhost:8080"
+	endpoint := getEndpoint()
 	e := httpexpect.Default(t, endpoint)
 	testAllEndpoints(e, http.StatusUnauthorized)
 }
 
 func TestAPIWithoutOwnership(t *testing.T) {
-	endpoint := "http://localhost:8080"
+	endpoint := getEndpoint()
 	token, err := fetchToken(endpoint, "shibuya")
 	assert.Nil(t, err)
 	clientOpts := client.NewClientOpts(endpoint, token, nil)

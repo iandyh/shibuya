@@ -158,7 +158,7 @@ func (rm *resourceManager) prepareResources(project *model.Project, kind model.P
 // Then we configure two engines for a plan and share some common data among them
 // Trigger the test and we check whether the data is being equally shared in the 2 engines(each should have 1)
 func TestFullAPI(t *testing.T) {
-	endpoint := "http://localhost:8080"
+	endpoint := getEndpoint()
 	rm := newResourceManager(endpoint, endpoint)
 	project, err := rm.createProject()
 	assert.Nil(t, err)
@@ -272,7 +272,7 @@ func TestFullAPI(t *testing.T) {
 }
 
 func TestObjectCRUD(t *testing.T) {
-	endpoint := "http://localhost:8080"
+	endpoint := getEndpoint()
 	rm := newResourceManager(endpoint, endpoint)
 	project, err := rm.createProject()
 	assert.Nil(t, err)
@@ -296,7 +296,7 @@ func TestObjectCRUD(t *testing.T) {
 }
 
 func TestObjectCRUDWithErrors(t *testing.T) {
-	endpoint := "http://localhost:8080"
+	endpoint := getEndpoint()
 	rm := newResourceManager(endpoint, endpoint)
 	invalidID := int64(100000000)
 	_, err := rm.projectClient.Get(invalidID)
