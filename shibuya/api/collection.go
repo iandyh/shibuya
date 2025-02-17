@@ -98,7 +98,7 @@ func (ca *CollectionAPI) Router() *httproute.Router {
 		{
 			Name:        "GET collection engine details",
 			Method:      "GET",
-			Path:        "{collection_id}/details",
+			Path:        "{collection_id}/engines_detail",
 			HandlerFunc: ca.collectionEnginesDetailHandler,
 		},
 
