@@ -208,16 +208,9 @@ func (as *AgentServer) SubscribeToCoordinator() (chan messages.Message, error) {
 	collectionID := as.options.EngineMeta.CollectionID
 	client := &client.PubSubClient{Addr: fmt.Sprintf("%s:2416", as.reqOpts.Endpoint),
 		Password: as.reqOpts.APIKey}
-	var msgChan chan messages.Message
-	var err error
-	// TODO add timeout here
-	for {
-		time.Sleep(2 * time.Second)
-		msgChan, _, err = client.Subscribe(fmt.Sprintf("collection:%s", collectionID), &payload.Payload{})
-		if err != nil {
-			continue
-		}
-		break
+	msgChan, _, err := client.Subscribe(fmt.Sprintf("collection:%s", collectionID), &payload.Payload{})
+	if err != nil {
+		return nil, err
 	}
 	as.logger.Infof("Subscribe to coordinator at %s", as.reqOpts.Endpoint)
 	return msgChan, nil
@@ -442,11 +435,17 @@ func (as *AgentServer) Run() error {
 			options.Logger.Fatal(err)
 		}
 	}()
-	msgChan, err := as.SubscribeToCoordinator()
-	if err != nil {
-		return err
-	}
-	go as.listenToCoordinator(msgChan)
+	go func() {
+		for {
+			time.Sleep(2 * time.Second)
+			msgChan, err := as.SubscribeToCoordinator()
+			if err != nil {
+				continue
+			}
+			as.listenToCoordinator(msgChan)
+		}
+	}()
+
 	go as.handleMetricStream()
 	router := as.HTTPRouter()
 	handlers := http.Handler(router.Mux())
