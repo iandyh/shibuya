@@ -176,12 +176,8 @@ func (ca *CollectionAPI) Router() *httproute.Router {
 	return router
 }
 
-func getCollection(r *http.Request, authConfig *config.AuthConfig) (*model.Collection, error) {
-	cid, err := strconv.Atoi(r.PathValue("collection_id"))
-	if err != nil {
-		return nil, makeInvalidResourceError("collection_id")
-	}
-	collection, err := model.GetCollection(int64(cid))
+func checkCollectionOwnership(collectionID int64, r *http.Request, authConfig *config.AuthConfig) (*model.Collection, error) {
+	collection, err := model.GetCollection(collectionID)
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +186,14 @@ func getCollection(r *http.Request, authConfig *config.AuthConfig) (*model.Colle
 		return nil, err
 	}
 	return collection, nil
+}
+
+func getCollection(r *http.Request, authConfig *config.AuthConfig) (*model.Collection, error) {
+	cid, err := strconv.Atoi(r.PathValue("collection_id"))
+	if err != nil {
+		return nil, makeInvalidResourceError("collection_id")
+	}
+	return checkCollectionOwnership(int64(cid), r, authConfig)
 }
 
 func hasInvalidDiff(curr, updated []*model.ExecutionPlan) (bool, string) {

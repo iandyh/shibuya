@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/config"
@@ -22,11 +23,14 @@ func (mg *MetricsGateway) rewrite(r *httputil.ProxyRequest) {
 	if collectionID == "" {
 		return
 	}
+	cid, err := strconv.Atoi(collectionID)
+	if err != nil {
+		return
+	}
 	// We disallow admin to write metrics.  so a nil authconfig is provided here
 	// One thing we can improve(TODO) in the future is to return the error directly here to the users
 	// for the errors(403, 404, etc)
-	_, err := getCollection(r.In, nil)
-	if err != nil {
+	if _, err := checkCollectionOwnership(int64(cid), r.In, nil); err != nil {
 		return
 	}
 	// TODO: right now we don't support fan-out as reverseproxy does not suppport it
