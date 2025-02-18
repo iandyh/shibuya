@@ -48,6 +48,7 @@ type AgentServer struct {
 	angentDir       AgentDir
 	runID           int64
 	mu              sync.RWMutex
+	processLock     sync.RWMutex
 }
 
 func NewAgentServer(opts AgentServerOptions) *AgentServer {
@@ -239,24 +240,48 @@ func (as *AgentServer) stopTestByCancel() {
 	as.cancel()
 }
 
+func (as *AgentServer) getProcess() *os.Process {
+	as.processLock.RLock()
+	defer as.processLock.RUnlock()
+
+	return as.process
+}
+
+func (as *AgentServer) setProcess(p *os.Process) {
+	as.processLock.Lock()
+	defer as.processLock.Unlock()
+
+	as.process = p
+}
+
+func (as *AgentServer) killProcess() error {
+	as.processLock.Lock()
+	defer as.processLock.Unlock()
+
+	if as.process != nil {
+		return as.process.Kill()
+	}
+	return nil
+}
+
 func (as *AgentServer) finishCommand() {
 	for {
 		select {
 		case <-as.ctx.Done():
 			defer func() {
-				as.process = nil
+				as.setProcess(nil)
 				em := as.options.EngineMeta
 				as.cdrclient.ReportProgress(as.reqOpts, em.CollectionID, em.PlanID, em.EngineID, false)
 			}()
 			stopCommand := as.options.StopCommand
-			if stopCommand == nil && as.process != nil {
-				as.logger.Infof("No stop command is provided. Going to kill the process %d", as.process.Pid)
+			if stopCommand == nil {
+				as.logger.Infof("No stop command is provided. Going to kill the process %d", as.getProcess().Pid)
 				if err := as.process.Kill(); err != nil {
 					as.logger.Error(err)
 				}
 				return
 			}
-			as.logger.Infof("Shutting down process %d", as.process.Pid)
+			as.logger.Infof("Shutting down process %d", as.getProcess().Pid)
 			cmd := stopCommand.ToExec()
 			if err := cmd.Run(); err != nil {
 				as.logger.Error(err)
@@ -284,7 +309,7 @@ func (as *AgentServer) runCommand(runID int64) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	as.assignCtx(ctx, cancel)
-	as.process = command.Process
+	as.setProcess(command.Process)
 	as.runID = runID
 	go as.tailFunc(resultFile)
 	go as.finishCommand()
