@@ -185,6 +185,11 @@ func (kcm *K8sClientManager) FetchEngineUrlsByPlan(collectionID, planID int64, o
 func (kcm *K8sClientManager) CollectionStatus(projectID, collectionID int64, eps []*model.ExecutionPlan) (*smodel.CollectionStatus, error) {
 	planStatuses := make(map[int64]*smodel.PlanStatus)
 	cs := &smodel.CollectionStatus{}
+	// We could use the endpoints to check whether the engines are running but that will
+	// require a fan-out requests to apiserver by plan(if one collection has n plans,
+	// that will be n apiserver calls).
+	// Getting all the pods by labelselector with collectionID(one apiserver call) would reduce the
+	// amount of requests we send to the apiserver.
 	pods, err := kcm.GetPodsByCollection(collectionID, "")
 	if err != nil {
 		return cs, err
