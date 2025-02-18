@@ -178,9 +178,10 @@ func (s *APIServer) planTerminationHandler(w http.ResponseWriter, r *http.Reques
 	cid := r.PathValue("collection_id")
 	pid := r.PathValue("plan_id")
 	pm := make(payload.PlanMessage)
-	pm[pid] = &payload.EngineMessage{Verb: "stop"}
+	pm[pid] = &payload.EngineMessage{}
 	payload := &payload.Payload{
 		PlanMessage: pm,
+		Verb:        "stop",
 	}
 	if err := s.pubsubServer.Broadcast(fmt.Sprintf("collection:%s", cid), payload); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

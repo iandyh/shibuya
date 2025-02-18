@@ -40,7 +40,10 @@ func (c *Controller) CheckRunningThenTerminate() {
 					collection := j.collection
 					currRunID, err := collection.GetCurrentRun()
 					if currRunID != int64(0) {
-						pc.term(c.cdrclient, ro)
+						if err := pc.term(c.cdrclient, ro); err != nil {
+							log.Error(err)
+							continue jobLoop
+						}
 						log.Printf("Plan %d is terminated.", j.ep.PlanID)
 					}
 					if err != nil {
