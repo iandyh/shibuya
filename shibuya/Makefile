@@ -99,6 +99,7 @@ shibuya: base_image local_api local_controller
 	sh gen_coordinator_ca.sh $(shibuya-controller-ns)
 	sh gen_jwt_secret.sh $(shibuya-controller-ns) dummy-jwt-secret
 	helm upgrade --install shibuya install/shibuya
+	sleep 1
 	kubectl wait --for=condition=Ready pods -l app=shibuya-apiserver --timeout=1m
 	make -C ../ expose
 
