@@ -1,4 +1,4 @@
-all: | cluster permissions db prometheus grafana local_storage shibuya_all
+all: | cluster permissions pdb db prometheus grafana local_storage shibuya_all
 
 shibuya-controller-ns = shibuya-executors
 shibuya-executor-ns = shibuya-executors
@@ -57,6 +57,11 @@ expose:
 .PHONY: kubeconfig
 kubeconfig:
 	./kubernetes/generate_kubeconfig.sh $(shibuya-controller-ns) $(shibuya_sa_secret)
+
+.PHONY: pdb
+pdb:
+	-kubectl -n $(shibuya-controller-ns) delete -f kubernetes/pdb.yaml
+	kubectl -n $(shibuya-controller-ns) apply -f kubernetes/pdb.yaml
 
 .PHONY: permissions
 permissions:
