@@ -12,7 +12,6 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/rakutentech/shibuya/shibuya/coordinator/planprogress"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
@@ -152,17 +151,8 @@ func (s *APIServer) collectionProgressHandler(w http.ResponseWriter, r *http.Req
 func (s *APIServer) planTerminationHandler(w http.ResponseWriter, r *http.Request) {
 	cid := r.PathValue("collection_id")
 	pid := r.PathValue("plan_id")
-	prgs, ok := s.planProgress.Get(cid, pid)
-	if !ok {
-		return
-	}
-	if !prgs.IsRunning() {
-		log.Infof("Engines in the plan %s-%s are already stopped.", cid, pid)
-		s.planProgress.Delete(cid, pid)
-		return
-	}
 	pm := make(payload.PlanMessage)
-	pm[pid] = &payload.EngineMessage{Verb: "stop"}
+	pm[pid] = &payload.EngineMessage{}
 	payload := &payload.Payload{
 		PlanMessage: pm,
 		Verb:        "stop",
