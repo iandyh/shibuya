@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/rakutentech/shibuya/shibuya/coordinator/api"
-	"github.com/rakutentech/shibuya/shibuya/coordinator/planprogress"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
 	"github.com/rakutentech/shibuya/shibuya/http/auth"
@@ -115,8 +114,7 @@ func NewShibuyaCoordinator(cc CoordinatorConfig) *ShibuyaCoordinator {
 		Name: "shibuya coordinator",
 		Path: "",
 	}
-	pp := planprogress.NewPlanProgress()
-	apiserver := api.NewAPIServer(pub, pp, inventory)
+	apiserver := api.NewAPIServer(pub, inventory, cc.APIKey)
 	rootRouter.Mount(apiserver.Router())
 	rootRouter.AddRoutes(newFileServer())
 	mux := rootRouter.Mux()

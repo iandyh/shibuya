@@ -83,22 +83,6 @@ func (c *Client) ProgressCheck(ro ReqOpts, collectionID int64, planID int64) err
 	return c.sendRequest(req, ro)
 }
 
-func (c *Client) ReportProgress(ro ReqOpts, collectionID, planID string, engineID int, status bool) error {
-	cid, err := strconv.ParseInt(collectionID, 10, 64)
-	if err != nil {
-		return err
-	}
-	endpoint := c.makeUrl(ro.Endpoint, cid)
-	values := url.Values{}
-	values.Add("running", strconv.FormatBool(status))
-	resourceUrl := fmt.Sprintf("%s/%s/%d", endpoint, planID, engineID)
-	req, err := c.makeRequestWithValues(resourceUrl, http.MethodPut, values)
-	if err != nil {
-		return err
-	}
-	return c.sendRequest(req, ro)
-}
-
 func (c *Client) TermCollection(ro ReqOpts, collectionID int64, eps []*model.ExecutionPlan) error {
 	endpoint := c.makeUrl(ro.Endpoint, collectionID)
 	planIDs := make([]string, len(eps))

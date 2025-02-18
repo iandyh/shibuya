@@ -20,7 +20,7 @@ import (
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/engines/containerstats"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
-	"github.com/rakutentech/shibuya/shibuya/http/auth"
+	httpauth "github.com/rakutentech/shibuya/shibuya/http/auth"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	"github.com/reqfleet/pubsub/client"
@@ -270,8 +270,6 @@ func (as *AgentServer) finishCommand() {
 		case <-as.ctx.Done():
 			defer func() {
 				as.setProcess(nil)
-				em := as.options.EngineMeta
-				as.cdrclient.ReportProgress(as.reqOpts, em.CollectionID, em.PlanID, em.EngineID, false)
 			}()
 			stopCommand := as.options.StopCommand
 			if stopCommand == nil {
@@ -313,9 +311,6 @@ func (as *AgentServer) runCommand(runID int64) error {
 	as.runID = runID
 	go as.tailFunc(resultFile)
 	go as.finishCommand()
-	em := as.options.EngineMeta
-	as.cdrclient.ReportProgress(as.options.EngineMeta.MakeReqOpts(),
-		em.CollectionID, em.PlanID, em.EngineID, true)
 	go func() {
 		command.Wait()
 		// The command could be stopped earlier. Calling the cancel func will have no effect.
@@ -422,6 +417,11 @@ func (as *AgentServer) HTTPRouter() *httproute.Router {
 	router := httproute.NewRouter("agent http endpoints", "")
 	router.AddRoutes(httproute.Routes{
 		{
+			Path:        "/progress",
+			Method:      "GET",
+			HandlerFunc: as.handleProcessCheck,
+		},
+		{
 			Path:        "/stream",
 			Method:      "GET",
 			HandlerFunc: as.StreamHandler,
@@ -451,7 +451,7 @@ func (as *AgentServer) Run() error {
 	router := as.HTTPRouter()
 	handlers := http.Handler(router.Mux())
 	// Running in http mode should be ok because engines are never directly exposed to public network
-	if err := http.ListenAndServe(":8080", auth.AuthRequiredWithToken(handlers, as.options.EngineMeta.APIKey)); err != nil {
+	if err := http.ListenAndServe(":8080", httpauth.AuthRequiredWithToken(handlers, options.EngineMeta.APIKey)); err != nil {
 		return err
 	}
 	return nil

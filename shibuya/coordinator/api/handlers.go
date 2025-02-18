@@ -7,27 +7,49 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	payload "github.com/rakutentech/shibuya/shibuya/coordinator/payload"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/upstream"
+	httptoken "github.com/rakutentech/shibuya/shibuya/http/auth/token"
 	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
-	log "github.com/sirupsen/logrus"
 
-	"github.com/rakutentech/shibuya/shibuya/coordinator/planprogress"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
 	pubsub "github.com/reqfleet/pubsub/server"
 )
 
 type APIServer struct {
+	// client used for engine progress check
+	httpClient   *http.Client
+	apiKey       string
 	pubsubServer *pubsub.PubSubServer
-	planProgress *planprogress.PlanProgress
 	inventory    *upstream.Inventory
 }
 
-func NewAPIServer(server *pubsub.PubSubServer, planProgress *planprogress.PlanProgress, inventory *upstream.Inventory) *APIServer {
-	s := &APIServer{pubsubServer: server, planProgress: planProgress, inventory: inventory}
+func NewAPIServer(server *pubsub.PubSubServer, inventory *upstream.Inventory, apiKey string) *APIServer {
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+	s := &APIServer{pubsubServer: server, inventory: inventory, apiKey: apiKey, httpClient: client}
 	return s
+}
+
+func engineProgress(endpoint, apiKey string, httpClient *http.Client) bool {
+	req, err := http.NewRequest("GET", fmt.Sprintf("http://%s/progress", endpoint), nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set(httptoken.AuthHeader, fmt.Sprintf("%s %s", httptoken.BEARER_PREFIX, apiKey))
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false
+	}
+	switch resp.StatusCode {
+	case http.StatusNoContent:
+		return true
+	}
+	return false
 }
 
 func (s *APIServer) Router() *httproute.Router {
@@ -61,12 +83,6 @@ func (s *APIServer) Router() *httproute.Router {
 			Method:      "DELETE",
 			Path:        "/{collection_id}/{plan_id}",
 			HandlerFunc: s.planTerminationHandler,
-		},
-		{
-			Name:        "report engine running status",
-			Method:      "PUT",
-			Path:        "/{collection_id}/{plan_id}/{engine_id}",
-			HandlerFunc: s.engineReportProgressHandler,
 		},
 	}
 	collectionRouter := &httproute.Router{
@@ -111,8 +127,6 @@ func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Requ
 			DataFiles: make(map[string]struct{}),
 			RunID:     enginesConfig[0].RunID,
 		}
-		p := planprogress.NewProgress(collectionID, planID, len(enginesConfig))
-		s.planProgress.Add(p)
 		totalEngines += len(enginesConfig)
 	}
 	topic := fmt.Sprintf("collection:%s", collectionID)
@@ -132,35 +146,37 @@ func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Requ
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// TODO shall we wait for all the plans to be running?
 }
 
 func (s *APIServer) collectionProgressHandler(w http.ResponseWriter, r *http.Request) {
 	cid := r.PathValue("collection_id")
 	pid := r.PathValue("plan_id")
-	prgs, ok := s.planProgress.Get(cid, pid)
-	if !ok {
-		w.WriteHeader(http.StatusNotFound)
+	endpointsByPlan := s.inventory.GetPlanEndpoints(cid, pid)
+	results := make(chan bool, len(endpointsByPlan))
+	var wg sync.WaitGroup
+	for _, ep := range endpointsByPlan {
+		wg.Add(1)
+		go func(ep string) {
+			defer wg.Done()
+			results <- engineProgress(ep, s.apiKey, s.httpClient)
+		}(ep)
+	}
+	wg.Wait()
+	running := true
+	for i := 0; i < len(endpointsByPlan); i++ {
+		running = running && <-results
+	}
+	if running {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
-	if !prgs.IsRunning() {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
+	w.WriteHeader(http.StatusNotFound)
+	close(results)
 }
 
 func (s *APIServer) planTerminationHandler(w http.ResponseWriter, r *http.Request) {
 	cid := r.PathValue("collection_id")
 	pid := r.PathValue("plan_id")
-	prgs, ok := s.planProgress.Get(cid, pid)
-	if !ok {
-		return
-	}
-	if !prgs.IsRunning() {
-		log.Infof("Engines in the plan %s-%s are already stopped.", cid, pid)
-		s.planProgress.Delete(cid, pid)
-		return
-	}
 	pm := make(payload.PlanMessage)
 	pm[pid] = &payload.EngineMessage{Verb: "stop"}
 	payload := &payload.Payload{
@@ -170,29 +186,6 @@ func (s *APIServer) planTerminationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.planProgress.TermPlan(cid, pid)
-}
-
-func (s *APIServer) engineReportProgressHandler(w http.ResponseWriter, r *http.Request) {
-	cid := r.PathValue("collection_id")
-	pid := r.PathValue("plan_id")
-	eid, err := findEngineID(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	r.ParseForm()
-	running, err := strconv.ParseBool(r.Form.Get("running"))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	prgs, ok := s.planProgress.Get(cid, pid)
-	if !ok {
-		http.Error(w, "Cannot find progress", http.StatusBadRequest)
-		return
-	}
-	prgs.Engines[eid].SetStatus(running)
 }
 
 func (s *APIServer) collectionHealthCheckHandler(w http.ResponseWriter, r *http.Request) {
@@ -225,15 +218,6 @@ func (s *APIServer) collectionTermHandler(w http.ResponseWriter, r *http.Request
 	if err := s.pubsubServer.Broadcast(topic, p); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-	var wg sync.WaitGroup
-	for pid := range p.PlanMessage {
-		wg.Add(1)
-		go func(pid string) {
-			s.planProgress.TermPlan(cid, pid)
-			wg.Done()
-		}(pid)
-		wg.Wait()
 	}
 }
 

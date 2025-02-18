@@ -18,7 +18,7 @@ import (
 
 type Inventory struct {
 	namespace             string
-	inventoryByCollection map[string]int
+	inventoryByCollection map[string][]EngineEndPoint
 	engineInventory       map[string]EngineEndPoint
 	mu                    sync.RWMutex
 	client                *kubernetes.Clientset
@@ -30,7 +30,7 @@ func NewInventory(namespace string, inCluster bool) (*Inventory, error) {
 		return nil, err
 	}
 	return &Inventory{
-		inventoryByCollection: make(map[string]int),
+		inventoryByCollection: make(map[string][]EngineEndPoint),
 		engineInventory:       make(map[string]EngineEndPoint),
 		client:                client,
 		namespace:             namespace,
@@ -41,6 +41,7 @@ type EngineEndPoint struct {
 	collectionID string
 	addr         string
 	path         string
+	planID       string
 }
 
 func (ivt *Inventory) FindPodIP(url string) string {
@@ -58,7 +59,7 @@ func (ivt *Inventory) GetEndpointsCountByCollection(collectionID string) int {
 	ivt.mu.RLock()
 	defer ivt.mu.RUnlock()
 
-	return ivt.inventoryByCollection[collectionID]
+	return len(ivt.inventoryByCollection[collectionID])
 }
 
 func (ivt *Inventory) updateInventory(inventoryByCollection map[string][]EngineEndPoint) {
@@ -67,7 +68,7 @@ func (ivt *Inventory) updateInventory(inventoryByCollection map[string][]EngineE
 	log.Debugf("Going to update inventory with following states %v", inventoryByCollection)
 
 	for collectionID, ep := range inventoryByCollection {
-		ivt.inventoryByCollection[collectionID] = len(ep)
+		ivt.inventoryByCollection[collectionID] = ep
 		log.Infof("Updated %s with number of eps %d", collectionID, len(ep))
 		for _, ee := range ep {
 			ivt.engineInventory[ee.path] = ee
@@ -78,7 +79,6 @@ func (ivt *Inventory) updateInventory(inventoryByCollection map[string][]EngineE
 		if _, ok := inventoryByCollection[ee.collectionID]; !ok {
 			delete(ivt.engineInventory, path)
 			log.Infof("Cleaned the inventory for engine with path %s", path)
-			ivt.inventoryByCollection[ee.collectionID] -= 1
 		}
 	}
 }
@@ -151,11 +151,26 @@ func (ivt *Inventory) MakeInventory(projectID string) {
 					path:         podName,
 					addr:         fmt.Sprintf("%s:%d", e.IP, port),
 					collectionID: collectionID,
+					planID:       planID,
 				})
 			}
 		}
 		ivt.updateInventory(inventoryByCollection)
 	}
+}
+
+func (ivt *Inventory) GetPlanEndpoints(collectionID, planID string) []string {
+	ivt.mu.RLock()
+	defer ivt.mu.RUnlock()
+	endpointsByCollection := ivt.inventoryByCollection[collectionID]
+	endpointsByPlan := make([]string, 0)
+	for _, ep := range endpointsByCollection {
+		if ep.planID != planID {
+			continue
+		}
+		endpointsByPlan = append(endpointsByPlan, ep.addr)
+	}
+	return endpointsByPlan
 }
 
 func (ivt *Inventory) getPlanEnginesCount(projectID, collectionID, planID string) (int, error) {
