@@ -14,14 +14,11 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/hpcloud/tail"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	cdrclient "github.com/rakutentech/shibuya/shibuya/coordinator/client"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/payload"
 	"github.com/rakutentech/shibuya/shibuya/coordinator/storage"
 	"github.com/rakutentech/shibuya/shibuya/engines/containerstats"
 	enginesModel "github.com/rakutentech/shibuya/shibuya/engines/model"
-	httpauth "github.com/rakutentech/shibuya/shibuya/http/auth"
-	httproute "github.com/rakutentech/shibuya/shibuya/http/route"
 	"github.com/rakutentech/shibuya/shibuya/scheduler/k8s"
 	"github.com/reqfleet/pubsub/client"
 	"github.com/reqfleet/pubsub/messages"
@@ -76,23 +73,6 @@ func NewAgentServer(opts AgentServerOptions) *AgentServer {
 	return as
 }
 
-func (as *AgentServer) makePromMetrics(line string) {
-	metricParser := as.options.MetricParser
-	metric, err := metricParser(line)
-	// we need to pass the engine meta(project, collection, plan), especially run id
-	// Run id is generated at controller side
-	if err != nil {
-		return
-	}
-	em := as.options.EngineMeta
-	metric.CollectionID = em.CollectionID
-	metric.PlanID = em.PlanID
-	metric.EngineID = fmt.Sprintf("%d", em.EngineID)
-	metric.RunID = fmt.Sprintf("%d", as.runID)
-
-	metric.ToPrometheus()
-}
-
 func (as *AgentServer) handleMetricStream() {
 	for {
 		select {
@@ -116,6 +96,23 @@ func (as *AgentServer) handleMetricStream() {
 			}
 		}
 	}
+}
+
+func (as *AgentServer) makePromMetrics(line string) {
+	metricParser := as.options.MetricParser
+	metric, err := metricParser(line)
+	// we need to pass the engine meta(project, collection, plan), especially run id
+	// Run id is generated at controller side
+	if err != nil {
+		return
+	}
+	em := as.options.EngineMeta
+	metric.CollectionID = em.CollectionID
+	metric.PlanID = em.PlanID
+	metric.EngineID = fmt.Sprintf("%d", em.EngineID)
+	metric.RunID = fmt.Sprintf("%d", as.runID)
+
+	metric.ToPrometheus()
 }
 
 func (as *AgentServer) tailFunc(filepath string) {
@@ -169,38 +166,6 @@ func (as *AgentServer) reportOwnMetrics(interval time.Duration) error {
 			planID, engineNumber).Set(float64(used))
 		enginesModel.MemGauge.WithLabelValues(collectionID,
 			planID, engineNumber).Set(float64(memoryUsage))
-	}
-}
-
-func (as *AgentServer) StreamHandler(w http.ResponseWriter, r *http.Request) {
-	messageChan := make(chan string)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported!", http.StatusInternalServerError)
-		return
-
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-
-	// Signal the sw that we have a new connection
-	as.incomingClients <- messageChan
-	// Listen to connection close and un-register messageChan
-	notify := w.(http.CloseNotifier).CloseNotify()
-
-	go func() {
-		<-notify
-		as.closingClients <- messageChan
-	}()
-
-	for message := range messageChan {
-		if message == "" {
-			continue
-		}
-		fmt.Fprintf(w, "data: %s\n\n", message)
-		flusher.Flush()
 	}
 }
 
@@ -406,28 +371,6 @@ func MakeAgentServer(options AgentServerOptions) *AgentServer {
 	return as
 }
 
-func (as *AgentServer) HTTPRouter() *httproute.Router {
-	router := httproute.NewRouter("agent http endpoints", "")
-	router.AddRoutes(httproute.Routes{
-		{
-			Path:        "/progress",
-			Method:      "GET",
-			HandlerFunc: as.handleProcessCheck,
-		},
-		{
-			Path:        "/stream",
-			Method:      "GET",
-			HandlerFunc: as.StreamHandler,
-		},
-		{
-			Path:        "/metrics",
-			Method:      "GET",
-			HandlerFunc: promhttp.Handler().ServeHTTP,
-		},
-	})
-	return router
-}
-
 func (as *AgentServer) Run() error {
 	options := as.options
 	go func() {
@@ -445,15 +388,8 @@ func (as *AgentServer) Run() error {
 			as.listenToCoordinator(msgChan)
 		}
 	}()
-
 	go as.handleMetricStream()
-	router := as.HTTPRouter()
-	handlers := http.Handler(router.Mux())
-	// Running in http mode should be ok because engines are never directly exposed to public network
-	if err := http.ListenAndServe(":8080", httpauth.AuthRequiredWithToken(handlers, options.EngineMeta.APIKey)); err != nil {
-		return err
-	}
-	return nil
+	return as.startHTTPServer()
 }
 
 func FetchEngineMeta() EngineMeta {
