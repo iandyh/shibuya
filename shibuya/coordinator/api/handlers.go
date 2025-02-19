@@ -165,6 +165,7 @@ func (s *APIServer) planTerminationHandler(w http.ResponseWriter, r *http.Reques
 	pm[pid] = &payload.EngineMessage{Verb: "stop"}
 	payload := &payload.Payload{
 		PlanMessage: pm,
+		Verb:        "stop",
 	}
 	if err := s.pubsubServer.Broadcast(fmt.Sprintf("collection:%s", cid), payload); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

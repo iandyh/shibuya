@@ -264,6 +264,25 @@ func (as *AgentServer) killProcess() error {
 	return nil
 }
 
+func (as *AgentServer) reportProgress() {
+	ticker := time.NewTicker(2 * time.Second)
+	em := as.options.EngineMeta
+	for {
+		select {
+		case <-as.ctx.Done():
+			return
+		case <-ticker.C:
+			running := true
+			if as.getProcess() == nil {
+				running = false
+			}
+			if err := as.cdrclient.ReportProgress(as.reqOpts, em.CollectionID, em.PlanID, em.EngineID, running); err != nil {
+				log.Error(err)
+			}
+		}
+	}
+}
+
 func (as *AgentServer) finishCommand() {
 	for {
 		select {
@@ -316,6 +335,7 @@ func (as *AgentServer) runCommand(runID int64) error {
 	em := as.options.EngineMeta
 	as.cdrclient.ReportProgress(as.options.EngineMeta.MakeReqOpts(),
 		em.CollectionID, em.PlanID, em.EngineID, true)
+	go as.reportProgress()
 	go func() {
 		command.Wait()
 		// The command could be stopped earlier. Calling the cancel func will have no effect.

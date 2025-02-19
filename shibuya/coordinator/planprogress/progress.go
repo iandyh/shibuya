@@ -110,8 +110,9 @@ func (p *Progress) AnyRunning() bool {
 }
 
 type EngineProgress struct {
-	running bool
-	mu      sync.RWMutex
+	running          bool
+	mu               sync.RWMutex
+	lastReportedTime time.Time
 }
 
 func NewEngineProgress(engineID int) *EngineProgress {
@@ -123,11 +124,17 @@ func (ep *EngineProgress) SetStatus(running bool) {
 	ep.mu.Lock()
 	defer ep.mu.Unlock()
 	ep.running = running
+	ep.lastReportedTime = time.Now()
 }
 
 func (ep *EngineProgress) GetStatus() bool {
 	ep.mu.RLock()
 	defer ep.mu.RUnlock()
+
+	if ep.lastReportedTime.Add(4 * time.Second).Before(time.Now()) {
+		ep.running = false
+		return ep.running
+	}
 	return ep.running
 }
 

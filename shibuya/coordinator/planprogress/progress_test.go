@@ -42,6 +42,8 @@ func TestProgress(t *testing.T) {
 		assert.True(t, ep.GetStatus())
 	}
 	assert.True(t, p.IsRunning())
+	time.Sleep(4 * time.Second)
+	assert.False(t, p.IsRunning())
 
 	pp := planprogress.NewPlanProgress()
 	pp.Add(p)
