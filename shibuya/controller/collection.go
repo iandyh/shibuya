@@ -179,12 +179,26 @@ waitLoop:
 			allRunning = false
 			break waitLoop
 		case <-ticker:
+			var wg sync.WaitGroup
+			results := make(chan bool, len(collection.ExecutionPlans))
+			// TODO make this kind of code more generic
 			for _, ep := range collection.ExecutionPlans {
-				if err := c.cdrclient.ProgressCheck(ro, collection.ID, ep.PlanID); err != nil {
-					allRunning = false
-					continue waitLoop
-				}
+				wg.Add(1)
+				go func(planID int64) {
+					defer wg.Done()
+					if err := c.cdrclient.ProgressCheck(ro, collection.ID, planID); err != nil {
+						results <- false
+						return
+					}
+					results <- true
+				}(ep.PlanID)
 			}
+			wg.Wait()
+
+			for i := 0; i < len(collection.ExecutionPlans); i++ {
+				allRunning = allRunning && <-results
+			}
+			close(results)
 			if allRunning {
 				break waitLoop
 			}
