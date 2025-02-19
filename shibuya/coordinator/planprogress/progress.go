@@ -68,18 +68,15 @@ func (pp *PlanProgress) Delete(collectionID, planID string) {
 type Progress struct {
 	CollectionID string
 	PlanID       string
-	Engines      []*EngineProgress
+	Engines      map[int]*EngineProgress
+	mu           sync.RWMutex
 }
 
-func NewProgress(collectionID, planID string, enginesNum int) *Progress {
-	engines := make([]*EngineProgress, enginesNum)
-	for i := 0; i < enginesNum; i++ {
-		engines[i] = NewEngineProgress(i)
-	}
+func NewProgress(collectionID, planID string) *Progress {
 	return &Progress{
 		CollectionID: collectionID,
 		PlanID:       planID,
-		Engines:      engines,
+		Engines:      make(map[int]*EngineProgress),
 	}
 }
 
@@ -87,7 +84,24 @@ func (p *Progress) MakeKey() string {
 	return makeKey(p.CollectionID, p.PlanID)
 }
 
+func (p *Progress) SetEngineStatus(eid int, running bool) *EngineProgress {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	ep, ok := p.Engines[eid]
+	if !ok {
+		ep := &EngineProgress{}
+		ep.SetStatus(running)
+		p.Engines[eid] = ep
+		return ep
+	}
+	ep.SetStatus(running)
+	return ep
+}
+
 func (p *Progress) IsRunning() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if len(p.Engines) == 0 {
 		return false
 	}
@@ -99,6 +113,8 @@ func (p *Progress) IsRunning() bool {
 }
 
 func (p *Progress) AnyRunning() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	if len(p.Engines) == 0 {
 		return false
 	}
@@ -107,6 +123,13 @@ func (p *Progress) AnyRunning() bool {
 		t = t || e.GetStatus()
 	}
 	return t
+}
+
+func (p *Progress) Len() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	return len(p.Engines)
 }
 
 type EngineProgress struct {

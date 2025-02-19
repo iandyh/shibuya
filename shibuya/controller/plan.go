@@ -123,7 +123,7 @@ func (pc *PlanController) UnSubscribe() {
 }
 
 func (pc *PlanController) progress(cdrclient *cdrclient.Client, ro cdrclient.ReqOpts) bool {
-	if err := cdrclient.ProgressCheck(ro, pc.collection.ID, pc.ep.PlanID); err == nil {
+	if err := cdrclient.ProgressCheck(ro, pc.collection.ID, pc.ep.PlanID, pc.ep.Engines); err == nil {
 		return true
 	}
 	return false

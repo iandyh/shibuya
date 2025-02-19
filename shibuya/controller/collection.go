@@ -180,7 +180,7 @@ waitLoop:
 			break waitLoop
 		case <-ticker:
 			for _, ep := range collection.ExecutionPlans {
-				if err := c.cdrclient.ProgressCheck(ro, collection.ID, ep.PlanID); err != nil {
+				if err := c.cdrclient.ProgressCheck(ro, collection.ID, ep.PlanID, ep.Engines); err != nil {
 					allRunning = false
 					continue waitLoop
 				}

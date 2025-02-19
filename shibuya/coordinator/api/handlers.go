@@ -110,7 +110,7 @@ func (s *APIServer) collectionTriggerHandler(w http.ResponseWriter, r *http.Requ
 			DataFiles: make(map[string]struct{}),
 			RunID:     enginesConfig[0].RunID,
 		}
-		p := planprogress.NewProgress(collectionID, planID, len(enginesConfig))
+		p := planprogress.NewProgress(collectionID, planID)
 		s.planProgress.Add(p)
 		totalEngines += len(enginesConfig)
 	}
@@ -142,6 +142,17 @@ func (s *APIServer) collectionProgressHandler(w http.ResponseWriter, r *http.Req
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+	query := r.URL.Query()
+	v := query.Get("engines")
+	engines, err := strconv.ParseInt(v, 10, 32)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if prgs.Len() != int(engines) {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
 	if !prgs.IsRunning() {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -161,7 +172,6 @@ func (s *APIServer) planTerminationHandler(w http.ResponseWriter, r *http.Reques
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.planProgress.TermPlan(cid, pid)
 }
 
 func (s *APIServer) engineReportProgressHandler(w http.ResponseWriter, r *http.Request) {
@@ -180,10 +190,10 @@ func (s *APIServer) engineReportProgressHandler(w http.ResponseWriter, r *http.R
 	}
 	prgs, ok := s.planProgress.Get(cid, pid)
 	if !ok {
-		http.Error(w, "Cannot find progress", http.StatusBadRequest)
-		return
+		prgs = planprogress.NewProgress(cid, pid)
 	}
-	prgs.Engines[eid].SetStatus(running)
+	engineID := int(eid)
+	prgs.SetEngineStatus(engineID, running)
 }
 
 func (s *APIServer) collectionHealthCheckHandler(w http.ResponseWriter, r *http.Request) {

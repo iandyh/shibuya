@@ -26,7 +26,7 @@ func TestClient(t *testing.T) {
 		APIKey:   "key", // TODO: fix the key here
 	}
 	client := cdrclient.NewClient(&http.Client{Timeout: 5 * time.Second})
-	err := client.ProgressCheck(ro, 1, 1)
+	err := client.ProgressCheck(ro, 1, 1, 1)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "403")
 }

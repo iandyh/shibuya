@@ -12,7 +12,7 @@ func TestPlanProgress(t *testing.T) {
 	pp := planprogress.NewPlanProgress()
 	collectionID := "1"
 	planID := "1"
-	p := planprogress.NewProgress(collectionID, planID, 2)
+	p := planprogress.NewProgress(collectionID, planID)
 	pp.Add(p)
 
 	getPP, ok := pp.Get(collectionID, planID)
@@ -30,17 +30,17 @@ func TestProgress(t *testing.T) {
 	collectionID := "1"
 	planID := "1"
 	enginesNum := 2
-	p := planprogress.NewProgress(collectionID, planID, enginesNum)
+	p := planprogress.NewProgress(collectionID, planID)
 	assert.False(t, p.IsRunning())
 	assert.False(t, p.IsRunning())
 	assert.False(t, p.AnyRunning())
 
-	for _, ep := range p.Engines {
-		assert.False(t, ep.GetStatus())
-		ep.SetStatus(true)
+	for i := 0; i < enginesNum; i++ {
+		ep := p.SetEngineStatus(i, true)
 		assert.True(t, p.AnyRunning())
 		assert.True(t, ep.GetStatus())
 	}
+	assert.Equal(t, enginesNum, p.Len())
 	assert.True(t, p.IsRunning())
 	time.Sleep(4 * time.Second)
 	assert.False(t, p.IsRunning())

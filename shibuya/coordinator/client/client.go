@@ -73,10 +73,12 @@ func (c *Client) Healthcheck(ro ReqOpts, collection *model.Collection, numberOfE
 	return c.sendRequest(req, ro)
 }
 
-func (c *Client) ProgressCheck(ro ReqOpts, collectionID int64, planID int64) error {
+func (c *Client) ProgressCheck(ro ReqOpts, collectionID int64, planID int64, enginesNum int) error {
 	endpoint := c.makeUrl(ro.Endpoint, collectionID)
 	resourceUrl := fmt.Sprintf("%s/%d", endpoint, planID)
-	req, err := http.NewRequest("GET", resourceUrl, nil)
+	values := url.Values{}
+	values.Add("engines", strconv.Itoa(enginesNum))
+	req, err := c.makeRequestWithValues(resourceUrl, http.MethodGet, values)
 	if err != nil {
 		return err
 	}
