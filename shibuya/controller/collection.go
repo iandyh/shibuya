@@ -168,13 +168,37 @@ func (c *Controller) TriggerCollection(collection *model.Collection) error {
 	if err := c.cdrclient.TriggerCollection(ro, collection, planEngineDataConfigs, plans); err != nil {
 		return err
 	}
+	allRunning := true
+	timeoutDuration := time.Duration(30 * time.Second)
+	timeout := time.After(timeoutDuration)
+	ticker := time.Tick(1 * time.Second)
+waitLoop:
+	for {
+		select {
+		case <-timeout:
+			allRunning = false
+			break waitLoop
+		case <-ticker:
+			for _, ep := range collection.ExecutionPlans {
+				if err := c.cdrclient.ProgressCheck(ro, collection.ID, ep.PlanID); err != nil {
+					allRunning = false
+					continue waitLoop
+				}
+			}
+			if allRunning {
+				break waitLoop
+			}
+		}
+	}
+	if !allRunning {
+		return fmt.Errorf("Trigger failed after %v. Please purge and try again.", timeoutDuration)
+	}
 	for _, ep := range collection.ExecutionPlans {
 		if err := model.AddRunningPlan(c.sc.Context, collection.ID, ep.PlanID); err != nil {
 			return err
 		}
 	}
-	collection.NewRun(runID)
-	return nil
+	return collection.NewRun(runID)
 }
 
 func (c *Controller) TermCollection(collection *model.Collection, force bool) (e error) {
