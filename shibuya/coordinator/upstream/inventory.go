@@ -81,6 +81,11 @@ func (ivt *Inventory) updateInventory(inventoryByCollection map[string][]EngineE
 			log.Infof("Cleaned the inventory for engine with path %s", path)
 		}
 	}
+	for collectionID := range ivt.inventoryByCollection {
+		if _, ok := inventoryByCollection[collectionID]; !ok {
+			delete(ivt.inventoryByCollection, collectionID)
+		}
+	}
 }
 
 func (ivt *Inventory) MakeInventory(projectID string) {
